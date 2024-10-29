@@ -1,5 +1,4 @@
-# Display webcam or video
-# Adds a mask to the video for detecting apriltags
+# Detects apriltags from an uploaded image
 # see https://pyimagesearch.com/2020/11/02/apriltag-with-python/
 # but for windows needed robotpy_apriltag instead of apriltag
 # see https://robotpy.readthedocs.io/projects/apriltag/en/latest/robotpy_apriltag.html
