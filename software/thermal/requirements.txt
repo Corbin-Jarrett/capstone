@@ -1,0 +1,7 @@
+cmapy
+numpy
+smbus
+crcmod
+matplotlib
+opencv-python
+pyserial
