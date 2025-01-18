@@ -8,6 +8,7 @@ import time
 import logging
 import serial
 import numpy as np
+from matplotlib import pyplot as plt
 
 try:
     import cv2 as cv
@@ -93,7 +94,7 @@ while var:
     # print("The 2D array is:")
     # # for row in data:  # Iterate over each row
     for i in range(len(data)):
-        if data[i] < 20:
+        if data[i] < 23:
             data[i] = 0
     #     print(element, end=" ")  # Print each element with a space
     # print()  # Move to the next line after each row
@@ -112,6 +113,23 @@ while var:
     filt_uint8 = cv_filter(remap(frame), par, use_median=True,
                            use_bilat=True, use_nlm=False)
     #
+    
+    _, thresh_image = cv.threshold(filt_uint8, 80, 255, cv.THRESH_BINARY)
+    contours, _ = cv.findContours(thresh_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    # Loop through the contours and filter based on area to detect the hand
+    for contour in contours:
+        area = cv.contourArea(contour)
+        #print(f"Contour area: {area}")  # Debugging line
+
+        # Filter out small contours that are likely noise
+        if area > 1:  # Adjust the minimum area based on hand size and image resolution
+            # Get the bounding box of the contour
+            x, y, w, h = cv.boundingRect(contour)
+
+            # Draw the bounding box around the detected hand
+            cv.rectangle(filt_uint8, (x, y), (x + w, y + h), (255, 255, 0), 1)
+            print(f"Bounding box: x={x}, y={y}, w={w}, h={h}")  # Debugging line
+    
     if header is not None:
         logger.debug('  '.join([format_header(header),
                                 format_framestats(data)]))
@@ -120,7 +138,22 @@ while var:
 
     if GUI:
 #        cv_render(filt_uint8, resize=(400,310), colormap='ironbow')
-        cv_render(filt_uint8, resize=(400,310), colormap='rainbow2')
+        #cv_render(filt_uint8, resize=(400,310), colormap='rainbow2')
+        # _, thresh_image = cv.threshold(filt_uint8, 80, 255, cv.THRESH_BINARY)
+        # contours, _ = cv.findContours(thresh_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        # # Loop through the contours and filter based on area to detect the hand
+        # for contour in contours:
+        #     area = cv.contourArea(contour)
+
+        #     # Filter out small contours that are likely noise
+        #     if area > 20:  # Adjust the minimum area based on hand size and image resolution
+        #         # Get the bounding box of the contour
+        #         x, y, w, h = cv.boundingRect(contour)
+
+        #         # Draw the bounding box around the detected hand
+        #         cv.rectangle(filt_uint8, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        # Show the result with bounding boxes around the detected hand
+        cv_render(filt_uint8, resize=(400, 310), colormap='rainbow2')
         # cv_render(remap(frame), resize=(400,310), colormap='rainbow2')
         key = cv.waitKey(1)  # & 0xFF
         if key == ord("q"):
