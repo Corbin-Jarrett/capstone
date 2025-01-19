@@ -21,6 +21,7 @@
 #define UART_0_TX 1
 #define UART_0_RX 3
 #define BLINK_GPIO 13 // GPIO 13
+#define BLINK_PERIOD 1000 // 1 sec
 #define DELIMITER ", "
 
 // will be read from RPI
@@ -34,6 +35,8 @@ static void configure_led(void)
     gpio_reset_pin(BLINK_GPIO);
     /* Set the GPIO as a push/pull output */
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+    /* Start GPIO as off */
+    gpio_set_level(BLINK_GPIO, false);
 }
 
 void init_RS232()
@@ -89,11 +92,25 @@ static void rx_task(void *task_func_param) //param not used but needed to align 
           threshold_1 = atoi(token); 
           token = strtok(NULL, DELIMITER); 
           threshold_2 = atoi(token); 
-          if (user_distance <= threshold_1) {
-            gpio_set_level(BLINK_GPIO, true);
-          }
-          else {
+          printf("Signal: %d\n", rpi_signal);
+          printf("User Distance: %d\n", user_distance);
+          printf("Threshold 1: %d\n", threshold_1);
+          printf("Threshold 2: %d\n", threshold_2);
+          if (user_distance <= threshold_2) {
+            printf("Blink LED (Closer Threshold)\n");
+            gpio_set_level(BLINK_GPIO, true); // turn the LED on 
+            vTaskDelay((BLINK_PERIOD/3) / portTICK_PERIOD_MS); // wait 1/3 period
+            gpio_set_level(BLINK_GPIO, false); 
+            vTaskDelay((BLINK_PERIOD/3) / portTICK_PERIOD_MS);
+            gpio_set_level(BLINK_GPIO, true); 
+            vTaskDelay((BLINK_PERIOD/3) / portTICK_PERIOD_MS); 
             gpio_set_level(BLINK_GPIO, false);
+          }        
+          else if (user_distance <= threshold_1) {
+            printf("Blink LED (Further Threshold)\n");
+            gpio_set_level(BLINK_GPIO, true); // turn the LED on 
+            vTaskDelay(BLINK_PERIOD / portTICK_PERIOD_MS); // wait 1 period
+            gpio_set_level(BLINK_GPIO, false); 
           }
         }
     }
@@ -108,18 +125,3 @@ void app_main() {
     init_RS232();
     xTaskCreate(rx_task, "uart_rx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
 }
-
-/*
-  if (user_distance <= distance_threshold_2) { // closer threshold and faster range
-    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-    delay(500);                        // wait for a half second
-    digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-    delay(500);                        // wait for a half second
-  }
-  else if (user_distance <= distance_threshold_1) { // further threshold and slower range
-    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-    delay(1000);                       // wait for a second
-    digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-    delay(1000);                       // wait for a second
-  }
-}*/

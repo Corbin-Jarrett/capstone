@@ -26,7 +26,7 @@ More information can be found in the documentation here: *https://www.electronic
 ### Configuration
 In the RPi, enter the command:s
 `sudo raspi-config`
-select interfacing options -> serial
+select Interface Options -> Serial Port
 For option "Would you like a login shell to be accessible over serial?" Select No.
 For option "Would you like the serial port hardware to be enabled?" Select Yes.
 Select Ok.

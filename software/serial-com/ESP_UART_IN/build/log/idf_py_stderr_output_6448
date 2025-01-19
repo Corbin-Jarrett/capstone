@@ -1,0 +1,55 @@
+[0;33m--- Warning: GDB cannot open serial ports accessed as COMx[0m
+[0;33m--- Using \\.\COM3 instead...[0m
+[0;33m--- esp-idf-monitor 1.5.0 on \\.\COM3 115200[0m
+[0;33m--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H[0m
+[0;33m--- 0x40080400: _init at ??:?
+[0m
+[0;33m--- To exit from IDF monitor please use "Ctrl+]". Alternatively, you can use Ctrl+T Ctrl+X to exit.[0m
+[0;33m--- 0x40056722: _strtol_r in ROM
+[0m
+[0;33m--- 0x400013f9: strcpy in ROM
+0x4000140d: strcpy in ROM
+[0m
+[0;33m--- 0x4005671f: _strtol_r in ROM
+0x4005682b: strtol in ROM
+0x400566cd: atoi in ROM
+0x400d813c: rx_task at C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/main/ESP_UART_IN.c:87
+0x40086f05: vPortTaskWrapper at C:/esp/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:139
+[0m
+[0;33m--- 0x40080400: _init at ??:?
+[0m
+[0;33m--- 0x40056722: _strtol_r in ROM
+[0m
+[0;33m--- 0x400013f9: strcpy in ROM
+0x4000140d: strcpy in ROM
+[0m
+[0;33m--- 0x4005671f: _strtol_r in ROM
+0x4005682b: strtol in ROM
+0x400566cd: atoi in ROM
+0x400d813c: rx_task at C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/main/ESP_UART_IN.c:87
+0x40086f05: vPortTaskWrapper at C:/esp/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:139
+[0m
+[0;33m--- 0x40080400: _init at ??:?
+[0m
+[0;33m--- 0x40056722: _strtol_r in ROM
+[0m
+[0;33m--- 0x400013f9: strcpy in ROM
+0x4000140d: strcpy in ROM
+[0m
+[0;33m--- 0x4005671f: _strtol_r in ROM
+0x4005682b: strtol in ROM
+0x400566cd: atoi in ROM
+0x400d813c: rx_task at C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/main/ESP_UART_IN.c:87
+0x40086f05: vPortTaskWrapper at C:/esp/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:139
+[0m
+[0;33m--- 0x40080400: _init at ??:?
+[0m
+[0m
+Traceback (most recent call last):
+  File "C:\esp\esp-idf\tools/idf_monitor.py", line 11, in <module>
+    sys.exit(subprocess.run([sys.executable, '-m', 'esp_idf_monitor'] + sys.argv[1:]).returncode)
+  File "subprocess.py", line 491, in run
+  File "subprocess.py", line 1016, in communicate
+  File "subprocess.py", line 1079, in wait
+  File "subprocess.py", line 1357, in _wait
+KeyboardInterrupt

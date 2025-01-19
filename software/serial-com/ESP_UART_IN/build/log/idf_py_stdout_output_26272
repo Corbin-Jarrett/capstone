@@ -1,0 +1,17 @@
+[1/9] Performing build step for 'bootloader'
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D C:\Users\sabri\Documents\Uni_Y4\4TB6\Capstone\capstone\software\serial-com\ESP_UART_IN\build\bootloader\esp-idf\esptool_py && C:\Users\sabri\.espressif\python_env\idf5.4_py3.8_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/build/bootloader/bootloader.bin"
+Bootloader binary size 0x6560 bytes. 0xaa0 bytes (9%) free.
+[2/9] No install step for 'bootloader'
+[3/9] Completed 'bootloader'
+[4/9] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/ESP_UART_IN.c.obj
+[5/9] Linking C static library esp-idf\main\libmain.a
+[6/9] Generating ld/sections.ld
+[7/9] Linking CXX executable ESP_UART_IN.elf
+[8/9] Generating binary image from built executable
+esptool.py v4.8.1
+Creating esp32 image...
+Merged 2 ELF sections
+Successfully created esp32 image.
+Generated C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/build/ESP_UART_IN.bin
+[9/9] C:\WINDOWS\system32\cmd.exe /C "cd /D C:\Users\sabri\Documents\Uni_Y4\4TB6\Capstone\capstone\software\serial-com\ESP_UART_IN\build\esp-idf\esptool_py && C:\Users\sabri\.espressif\python_env\idf5.4_py3.8_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/build/partition_table/partition-table.bin C:/Users/sabri/Documents/Uni_Y4/4TB6/Capstone/capstone/software/serial-com/ESP_UART_IN/build/ESP_UART_IN.bin"
+ESP_UART_IN.bin binary size 0x31770 bytes. Smallest app partition is 0x100000 bytes. 0xce890 bytes (81%) free.

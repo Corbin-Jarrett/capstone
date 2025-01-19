@@ -11,7 +11,7 @@ user_distance = 8
 
 ser = serial.Serial ("/dev/ttyS0", 115200)      #Open port with baud rate
 while True:
-    message = str(signal) + delim + user_distance + delim + threshold_1 + delim + threshold_2 + '\r\n'
+    message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
     #transmit data serially 
     ser.write(bytes(message, 'utf8'))  #create byte object with data string
     print('Raspberry Pi 4b data sent: ' + message + '\n')
