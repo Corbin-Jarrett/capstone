@@ -91,6 +91,11 @@ while var:
     data_hand, header_hand = mi48.read()
     data_hazard, header_hazard = mi48.read()
 
+    if data is None:
+        logger.critical('NONE data received instead of GFRA')
+        mi48.stop()
+        sys.exit(1)
+
     # for row in data_hand:  # Iterate over each row
     for i in range(len(data_hand)):
         if data_hand[i] < 23 or data_hand[i] > 30:
@@ -100,11 +105,6 @@ while var:
     for i in range(len(data_hazard)):
         if data_hazard[i] < 40:
             data_hazard[i] = 0
-
-    if data is None:
-        logger.critical('NONE data received instead of GFRA')
-        mi48.stop()
-        sys.exit(1)
     
     #regular image
     min_temp = dminav(data.min())  # + 1.5
@@ -138,7 +138,7 @@ while var:
         #print(f"Contour area: {area}")  # Debugging line
 
         # Filter out small contours that are likely noise
-        if area > 1:  # Adjust the minimum area based on hand size and image resolution
+        if area > 50:  # Adjust the minimum area based on hand size and image resolution
             # Get the bounding box of the contour
             x, y, w, h = cv.boundingRect(contour)
 
