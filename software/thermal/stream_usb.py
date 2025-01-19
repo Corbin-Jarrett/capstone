@@ -88,36 +88,52 @@ var = True
 
 while var:
     data, header = mi48.read()
+    data_hand, header_hand = mi48.read()
+    data_hazard, header_hazard = mi48.read()
 
-    # print(header)
+    # for row in data_hand:  # Iterate over each row
+    for i in range(len(data_hand)):
+        if data_hand[i] < 23 or data_hand[i] > 30:
+            data_hand[i] = 0
 
-    # print("The 2D array is:")
-    # # for row in data:  # Iterate over each row
-    for i in range(len(data)):
-        if data[i] < 23:
-            data[i] = 0
-    #     print(element, end=" ")  # Print each element with a space
-    # print()  # Move to the next line after each row
-
-    # var = False
+    # for row in data_hazard:  # Iterate over each row
+    for i in range(len(data_hazard)):
+        if data_hazard[i] < 40:
+            data_hazard[i] = 0
 
     if data is None:
         logger.critical('NONE data received instead of GFRA')
         mi48.stop()
         sys.exit(1)
-
+    
+    #regular image
     min_temp = dminav(data.min())  # + 1.5
     max_temp = dmaxav(data.max())  # - 1.5
     frame = data_to_frame(data, (80,62), hflip=False);
     frame = np.clip(frame, min_temp, max_temp)
     filt_uint8 = cv_filter(remap(frame), par, use_median=True,
                            use_bilat=True, use_nlm=False)
-    #
+    #hand image
+    min_temp_hand = dminav(data_hand.min())  # + 1.5
+    max_temp_hand = dmaxav(data_hand.max())  # - 1.5
+    frame_hand = data_to_frame(data_hand, (80,62), hflip=False);
+    frame_hand = np.clip(frame_hand, min_temp_hand, max_temp_hand)
+    filt_uint8_hand = cv_filter(remap(frame_hand), par, use_median=True,
+                           use_bilat=True, use_nlm=False)
+
+    # #hazard image
+    min_temp_hazard = dminav(data_hazard.min())  # + 1.5
+    max_temp_hazard = dmaxav(data_hazard.max())  # - 1.5
+    frame_hazard = data_to_frame(data_hazard, (80,62), hflip=False);
+    frame_hazard = np.clip(frame_hazard, min_temp_hazard, max_temp_hazard)
+    filt_uint8_hazard = cv_filter(remap(frame_hazard), par, use_median=True,
+                           use_bilat=True, use_nlm=False)
     
-    _, thresh_image = cv.threshold(filt_uint8, 80, 255, cv.THRESH_BINARY)
-    contours, _ = cv.findContours(thresh_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    #hand
+    _, thresh_image_hand = cv.threshold(filt_uint8_hand, 80, 255, cv.THRESH_BINARY)
+    contours_hand, _ = cv.findContours(filt_uint8_hand, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     # Loop through the contours and filter based on area to detect the hand
-    for contour in contours:
+    for contour in contours_hand:
         area = cv.contourArea(contour)
         #print(f"Contour area: {area}")  # Debugging line
 
@@ -128,7 +144,24 @@ while var:
 
             # Draw the bounding box around the detected hand
             cv.rectangle(filt_uint8, (x, y), (x + w, y + h), (255, 255, 0), 1)
-            print(f"Bounding box: x={x}, y={y}, w={w}, h={h}")  # Debugging line
+            print(f"Bounding box hand: x={x}, y={y}, w={w}, h={h}")  # Debugging line
+
+    # #hazard
+    _, thresh_image_hazard = cv.threshold(filt_uint8_hazard, 80, 255, cv.THRESH_BINARY)
+    contours_hazard, _ = cv.findContours(filt_uint8_hazard, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    # Loop through the contours and filter based on area to detect the hand
+    for contour in contours_hazard:
+        area = cv.contourArea(contour)
+        #print(f"Contour area: {area}")  # Debugging line
+
+        # Filter out small contours that are likely noise
+        if area > 1:  # Adjust the minimum area based on hand size and image resolution
+            # Get the bounding box of the contour
+            x, y, w, h = cv.boundingRect(contour)
+
+            # Draw the bounding box around the detected hand
+            cv.rectangle(filt_uint8, (x, y), (x + w, y + h), (255, 255, 0), 1)
+            print(f"Bounding box hazard: x={x}, y={y}, w={w}, h={h}")  # Debugging line
     
     if header is not None:
         logger.debug('  '.join([format_header(header),
@@ -139,19 +172,6 @@ while var:
     if GUI:
 #        cv_render(filt_uint8, resize=(400,310), colormap='ironbow')
         #cv_render(filt_uint8, resize=(400,310), colormap='rainbow2')
-        # _, thresh_image = cv.threshold(filt_uint8, 80, 255, cv.THRESH_BINARY)
-        # contours, _ = cv.findContours(thresh_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        # # Loop through the contours and filter based on area to detect the hand
-        # for contour in contours:
-        #     area = cv.contourArea(contour)
-
-        #     # Filter out small contours that are likely noise
-        #     if area > 20:  # Adjust the minimum area based on hand size and image resolution
-        #         # Get the bounding box of the contour
-        #         x, y, w, h = cv.boundingRect(contour)
-
-        #         # Draw the bounding box around the detected hand
-        #         cv.rectangle(filt_uint8, (x, y), (x + w, y + h), (0, 255, 0), 2)
         # Show the result with bounding boxes around the detected hand
         cv_render(filt_uint8, resize=(400, 310), colormap='rainbow2')
         # cv_render(remap(frame), resize=(400,310), colormap='rainbow2')
