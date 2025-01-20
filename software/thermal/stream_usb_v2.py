@@ -125,7 +125,7 @@ while True:
         if area > 25:  # Adjust the minimum area based on hand size and image resolution
             # convex hull
             hull = cv.convexHull(contour)
-            cv.drawContours(filt_uint8, [hull], -1, (0,255,0), 3)
+            cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 2)
             print("hand detected")
             # print(f"Bounding box hand: x={x}, y={y}, w={w}, h={h}")  # Debugging line
 
@@ -143,7 +143,7 @@ while True:
         if area > 1:  # Adjust the minimum area based on hand size and image resolution
             # convex hull
             hull = cv.convexHull(contour)
-            cv.drawContours(filt_uint8, [hull], -1, (0,255,0), 1)
+            cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 1)
             print("hazard detected")
             # print(f"Bounding box hazard: x={x}, y={y}, w={w}, h={h}")  # Debugging line
     
