@@ -10,8 +10,9 @@ NOTE: For other variant of the ESP32, you might need the CH340 drivers.
 Download them here: *http://www.wch-ic.com/downloads/CH341SER_ZIP.html*.
 
 ### Build/Deploy/Monitor
-To build, deploy and monitor the ESP, you need to install ESP-IDF Tools.
+To build, deploy and monitor the ESP, you need to install ESP-IDF Tools. 
 Follow the installation guide here: *https://espressif-docs.readthedocs-hosted.com/projects/esp-idf/en/stable/get-started/index.html#step-1-install-prerequisites*.
+Note: this code requires at least ESP-IDF 5.0 or later, we used version 5.4 of ESP-IDF.
 
 Once installed, open esp-idf 5.4 cmd.
 cd to the project folder *ESP_UART_IN*.
@@ -44,7 +45,8 @@ Ports on the RPi 4b:
 We are currently using the "mini-uart" which is */dev/ttyS0*. They can be swapped for faster performance of serial communication but then it will not be able to use bluetooth. 
 
 ## Physical Setup
-The ESP32's RX pin is the UART receiver and should be connected to the RPi 4b's TX pin (GPIO 14 / pin 8). They also need a common ground connected.
+The ESP32's GPIO 16 is the RX pin for the UART1 receiver and should be connected to the RPi 4b's TX pin (GPIO 14 / pin 8). They also need a common ground connected.
+Note: GPIO 3 is also RX but for UART0 which is also used by logging and had overflow issues.
 
 ## Tutorial
 More information on UART between RPi and ESP32 can be found in this video: *https://www.youtube.com/watch?v=qG8n44cgshg*.
