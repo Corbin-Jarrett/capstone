@@ -39,8 +39,8 @@ from senxor.utils import data_to_frame, remap, cv_filter,\
 # signal.signal(signal.SIGTERM, signal_handler)
 
 # change this to false if not interested in the image
-GUI_THERMAL = True
-GUI_NOIR = True
+GUI_THERMAL = False
+GUI_NOIR = False
 
 # set cv_filter parameters
 par = {'blur_ks':3, 'd':5, 'sigmaColor': 27, 'sigmaSpace': 27}
@@ -53,24 +53,20 @@ dminav = RollingAverageFilter(N=10)
 dmaxav = RollingAverageFilter(N=10)
 
 # set up serial connection to ESP
-# ser = serial.Serial ("/dev/ttyS0", 115200)      #Open port with baud rate
+ser = serial.Serial ("/dev/ttyS0", 115200)      #Open port with baud rate
 # function to write data to ESP. user_distance is in cm
 def writeSerial(signal, user_distance):
-    # delim = ', '
-    # threshold_1 = 30 # needs to be minimum 30
-    # threshold_2 = 5
+    delim = ', '
+    threshold_1 = 30 # needs to be minimum 30
+    threshold_2 = 5
 
-    # message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
-    # #transmit data serially 
-    # ser.write(bytes(message, 'utf8'))  #create byte object with data string
-    pass
+    message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
+    #transmit data serially 
+    ser.write(bytes(message, 'utf8'))  #create byte object with data string
 
 complete = False
-# cv show & render does not work in threads so do so in main thread
-cvshowframe = None
-cvrenderframe = None
 
-def noircapture(cvshowframe):
+def noircapture(showframe):
     global picam2
     # initialize camera
     picam2 = Picamera2()
@@ -94,14 +90,15 @@ def noircapture(cvshowframe):
         detections = detector.detect(gray)
         print("[INFO] {} total AprilTags detected".format(len(detections)))
 
-        cvshowframe = frame
+        showframe["noir"] = frame
+        time.sleep(0.025)
     
     # stop picam once while loop finished
     picam2.stop()
 
 
 
-def thermalcapture(cvrenderframe):
+def thermalcapture(renderframe):
     global mi48
     # Make an instance of the MI48, attaching USB for 
     # both control and data interface.
@@ -208,7 +205,8 @@ def thermalcapture(cvrenderframe):
                 cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 1)
                 # print("hazard detected")
         
-        cvrenderframe = filt_uint8
+        renderframe["thermal"] = filt_uint8
+        time.sleep(0.025)
     # close it once finished the while loop
     mi48.stop()
         # if header is not None:
@@ -218,10 +216,14 @@ def thermalcapture(cvrenderframe):
         #     logger.debug(format_framestats(data))
 
 # set up threads
+# cv show & render does not work in threads so do so in main thread
+cvshowframe = {}
+cvshowframe["noir"] = None
+cvshowframe["thermal"] = None
 t1 = threading.Thread(target=noircapture, args=(cvshowframe,))
-t2 = threading.Thread(target=thermalcapture, args=(cvrenderframe,))
-t1.setDaemon(True)
-t2.setDaemon(True)
+t2 = threading.Thread(target=thermalcapture, args=(cvshowframe,))
+t1.daemon = True
+t2.daemon = True
 t1.start()
 t2.start()
 
@@ -229,12 +231,15 @@ t2.start()
 while not complete:
     try:
         # change GUI in here
-        if GUI_NOIR and (cvshowframe != None):
-                cv.imshow("noir", cvshowframe) # display frame
-        
-        if GUI_THERMAL and (cvrenderframe != None):
+        if GUI_NOIR and (cvshowframe["noir"] is not None):
+            cv.imshow("noir", cvshowframe["noir"]) # display frame
+            key = cv.waitKey(1)
+        if GUI_THERMAL and (cvshowframe["thermal"] is not None):
             # Show the result with bounding boxes around the detected hand
-            cv_render(cvrenderframe, colormap='rainbow2')
+            cv_render(cvshowframe["thermal"], colormap='rainbow2')
+            key = cv.waitKey(1)
+        # time.sleep(0.25)
+
     except KeyboardInterrupt:
         complete = True
 
