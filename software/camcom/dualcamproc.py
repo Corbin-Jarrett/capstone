@@ -5,7 +5,6 @@ import sys
 import os
 import signal
 import time
-import logging
 import serial
 import numpy as np
 from picamera2 import Picamera2
@@ -19,24 +18,6 @@ from senxor.utils import data_to_frame, remap, cv_filter,\
                          cv_render, RollingAverageFilter,\
                          connect_senxor
 
-# This will enable mi48 logging debug messages
-# logger = logging.getLogger(__name__)
-# logging.basicConfig(level=os.environ.get("LOGLEVEL", "DEBUG"))
-
-# # define a signal handler to ensure clean closure upon CTRL+C
-# # or kill from terminal
-# def signal_handler(sig, frame):
-#     """Ensure clean exit in case of SIGINT or SIGTERM"""
-#     # logger.info("Exiting due to SIGINT or SIGTERM")
-#     mi48.stop()
-#     picam2.stop()
-#     cv.destroyAllWindows()
-#     # logger.info("Done.")
-#     sys.exit(0)
-
-# # Define the signals that should be handled to ensure clean exit
-# signal.signal(signal.SIGINT, signal_handler)
-# signal.signal(signal.SIGTERM, signal_handler)
 
 # change this to false if not interested in the image
 GUI_THERMAL = True
@@ -64,9 +45,11 @@ def writeSerial(signal, user_distance):
     #transmit data serially 
     ser.write(bytes(message, 'utf8'))  #create byte object with data string
 
-# complete = multiprocessing.Value('i', 0)
+noir_ready = multiprocessing.Value('i', 0)
+thermal_ready = multiprocessing.Value('i', 0)
+lock = multiprocessing.Lock()
 
-def noircapture():
+def noircapture(noir_ready, thermal_ready, lock):
     global picam2
     # initialize camera
     picam2 = Picamera2()
@@ -80,6 +63,16 @@ def noircapture():
 
     while True:
         try:
+            local_ready = False
+            # need to sync reading between processes
+            # keep checking if both readys are true
+            print("checking if ready in noir")
+            while not local_ready:
+                lock.acquire()
+                local_ready = (noir_ready.value == 1) and (thermal_ready.value == 1)
+                lock.release()
+
+            # print(f"noir capture time: {time.time()}")
             # capture next frame as 3D numpy array
             frame = picam2.capture_array()
 
@@ -89,7 +82,7 @@ def noircapture():
             # print("[INFO] detecting AprilTags...")
             detector = apriltag.Detector()
             detections = detector.detect(gray)
-            print("[INFO] {} total AprilTags detected".format(len(detections)))
+            # print("[INFO] {} total AprilTags detected".format(len(detections)))
             # print("[INFO] {} total AprilTags detected".format(0))
 
             if GUI_NOIR:
@@ -97,6 +90,12 @@ def noircapture():
                 key = cv.waitKey(1)  # & 0xFF
                 if key == ord("q"):
                     break
+
+            # make noir ready false
+            lock.acquire()
+            noir_ready.value = 0
+            lock.release()
+
         except KeyboardInterrupt:
             break
     
@@ -105,16 +104,12 @@ def noircapture():
 
 
 
-def thermalcapture():
+def thermalcapture(noir_ready, thermal_ready, lock):
     global mi48
     # Make an instance of the MI48, attaching USB for 
     # both control and data interface.
     # can try connect_senxor(src='/dev/ttyS3') or similar if default cannot be found
     mi48, connected_port, port_names = connect_senxor()
-
-    # print out camera info
-    # logger.info('Camera info:')
-    # logger.info(mi48.camera_info)
 
     # set desired FPS
     STREAM_FPS = 20
@@ -139,7 +134,17 @@ def thermalcapture():
             # THERMAL STUFF
             hand_found = False
 
-            # need to sync reading between threads
+            local_ready = False
+            # need to sync reading between processes
+            # keep checking if both readys are true
+            # print("checking if ready in thermal")
+            while not local_ready:
+                lock.acquire()
+                local_ready = (noir_ready.value == 1) and (thermal_ready.value == 1)
+                lock.release()
+
+            # print(f"thermal capture time: {time.time()}")
+
             data, header = mi48.read()
 
             if data is None:
@@ -184,7 +189,7 @@ def thermalcapture():
                 hull = cv.convexHull(contour_max)
                 cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 2)
 
-            print(f"len contour: {len(contour_max)}")
+            # print(f"len contour: {len(contour_max)}")
 
             # #hazard
             thresh = (hazard_temp-min_temp)/(max_temp-min_temp)*(255-min_temp)
@@ -217,19 +222,20 @@ def thermalcapture():
                 key = cv.waitKey(1)  # & 0xFF
                 if key == ord("q"):
                     break
+            
+            # make thermal ready false
+            lock.acquire()
+            thermal_ready.value = 0
+            lock.release()
+
         except KeyboardInterrupt:
             break
     # close it once finished the while loop
     mi48.stop()
-        # if header is not None:
-        #     logger.debug('  '.join([format_header(header),
-        #                             format_framestats(data)]))
-        # else:
-        #     logger.debug(format_framestats(data))
 
 # set up processes
-p1 = multiprocessing.Process(target=noircapture)
-p2 = multiprocessing.Process(target=thermalcapture)
+p1 = multiprocessing.Process(target=noircapture, args=(noir_ready, thermal_ready, lock))
+p2 = multiprocessing.Process(target=thermalcapture, args=(noir_ready, thermal_ready, lock))
 p1.start()
 p2.start()
 
@@ -237,7 +243,26 @@ p2.start()
 while True:
     try:
         # change GUI in here
-        time.sleep(0.25)
+
+        # check if noir and thermal are ready
+        print("checking if image captured")
+        local_ready = False
+        while not local_ready:
+            lock.acquire()
+            local_ready = (noir_ready.value == 0) and (thermal_ready.value == 0)
+            lock.release()
+
+        # do some kind of processing
+        time.sleep(0.5)
+
+        # ready for another image
+        print("ready to capture image!")
+        lock.acquire()
+        noir_ready.value = 1
+        thermal_ready.value = 1
+        lock.release()
+
+        time.sleep(0.5)
 
     except KeyboardInterrupt:
         break
