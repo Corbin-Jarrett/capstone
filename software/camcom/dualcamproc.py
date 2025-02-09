@@ -1,4 +1,5 @@
 # Capstone Eyecan Multiprocessing with both cameras
+# import apriltag
 import sys
 # sys.path.append("/home/test/myenv/lib/python3.11/site-packages")
 import os
@@ -7,8 +8,6 @@ import time
 import serial
 import numpy as np
 from picamera2 import Picamera2
-import apriltag
-import shapely
 import multiprocessing
 import cv2 as cv
 
@@ -25,8 +24,7 @@ GUI_NOIR = True
 # set cv_filter parameters
 par = {'blur_ks':3, 'd':5, 'sigmaColor': 27, 'sigmaSpace': 27}
 
-# threshold temperatures
-hand_temp = [23,35]
+# threshold temperature
 hazard_temp = 40
 
 dminav = RollingAverageFilter(N=10)
@@ -54,7 +52,7 @@ def noircapture(noir_ready, thermal_ready, lock):
     # configurations (see documentation for details)
     # check and choose a mode
     # print(picam2.sensor_modes)
-    mode = picam2.sensor_modes[3] # 3 or 7 are best
+    mode = picam2.sensor_modes[5]
     video_config = picam2.create_preview_configuration(sensor={'output_size': mode['size'], 'bit_depth': mode['bit_depth']}, main={'format': 'BGR888'})
     # start camera
     picam2.start(config=video_config)
@@ -73,18 +71,21 @@ def noircapture(noir_ready, thermal_ready, lock):
             # print(f"noir capture time: {time.time()}")
             # capture next frame as 3D numpy array
             frame = picam2.capture_array()
+            frame_cropped = frame[30:380,120:560] # y, x
 
-            # identify april tag(s)
-            gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            # define the AprilTags detector options and then detect AprilTags
-            # print("[INFO] detecting AprilTags...")
+            # detect hand
+            # print(frame.size())
+            # frame_cropped = frame[80,62]
+            # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             # detector = apriltag.Detector()
             # detections = detector.detect(gray)
             # print("[INFO] {} total AprilTags detected".format(len(detections)))
-            # print("[INFO] {} total AprilTags detected".format(0))
+
+
 
             if GUI_NOIR:
-                cv.imshow("noir", frame) # display frame
+                # cv.imshow("noir", frame) # display frame
+                cv.imshow("noircrop", frame_cropped)
                 key = cv.waitKey(1)  # & 0xFF
                 if key == ord("q"):
                     break
@@ -104,7 +105,6 @@ def noircapture(noir_ready, thermal_ready, lock):
 def thermalcapture(noir_ready, thermal_ready, lock):
     # Make an instance of the MI48, attaching USB for 
     # both control and data interface.
-    # can try connect_senxor(src='/dev/ttyS3') or similar if default cannot be found
     mi48, connected_port, port_names = connect_senxor()
 
     # set desired FPS
@@ -128,8 +128,6 @@ def thermalcapture(noir_ready, thermal_ready, lock):
     while True:
         try:
             # THERMAL STUFF
-            hand_found = False
-
             local_ready = False
             # need to sync reading between processes
             # keep checking if both readys are true
@@ -156,62 +154,24 @@ def thermalcapture(noir_ready, thermal_ready, lock):
             filt_uint8 = cv_filter(remap(frame), par, use_median=True,
                                 use_bilat=True, use_nlm=False)
             
-            #hand
-            # convert to grayscale temp for threshold, linear transformation
-            # thresh_low = (hand_temp[0]-min_temp)/(max_temp-min_temp)*(255-min_temp)
-            # thresh_high = (hand_temp[1]-min_temp)/(max_temp-min_temp)*(255-min_temp)
-
-            # ret, thresh_image_hand_lower = cv.threshold(remap(frame), thresh_low, 255, cv.THRESH_BINARY)
-            # ret, thresh_image_hand_upper = cv.threshold(remap(frame), thresh_high, 255, cv.THRESH_BINARY_INV)
-
-            # thresh_image_hand = np.logical_and(thresh_image_hand_lower,thresh_image_hand_upper).astype(np.uint8)
-            # contours_hand, ret = cv.findContours(thresh_image_hand, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            # # Loop through the contours and filter based on area to detect the hand
-            # contour_max = []
-            # max_area = 25
-            # for contour in contours_hand:
-            #     area = cv.contourArea(contour)
-            #     #print(f"Contour area: {area}")  # Debugging line
-
-            #     # Filter out small contours that are likely noise
-            #     if area > max_area:  # Adjust the minimum area based on hand size and image resolution
-            #         max_area = area
-            #         hand_found = True
-            #         contour_max = contour
-            #         # print("hand detected")
-
-            # if len(contour_max) > 0:
-            #     # convex hull
-            #     hull = cv.convexHull(contour_max)
-            #     cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 2)
-
-            # print(f"len contour: {len(contour_max)}")
-
             # #hazard
             thresh = (hazard_temp-min_temp)/(max_temp-min_temp)*(255-min_temp)
             ret, thresh_image_hazard = cv.threshold(remap(frame), thresh, 255, cv.THRESH_BINARY)
             contours_hazard, ret = cv.findContours(thresh_image_hazard, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            hazards_contour_list = []
             # Loop through the contours and filter based on area to detect the hand
             for contour in contours_hazard:
                 area = cv.contourArea(contour)
                 #print(f"Contour area: {area}")  # Debugging line
                 # Filter out small contours that are likely noise
                 if area > 1:  # Adjust the minimum area based on hand size and image resolution
-                    # if (hand_found):
-                    #     polygon_hazard = np.squeeze(contour)
-                    #     if not np.array_equal(polygon_hazard[0], polygon_hazard[-1]):
-                    #         polygon_hazard = np.vstack([polygon_hazard, polygon_hazard[0]]) #close polygon
-                    #     centroid = shapely.centroid(shapely.geometry.Polygon(polygon_hazard))
-                    #     distance = cv.pointPolygonTest(contour_max, (centroid.x, centroid.y), True)
-                    #     print(distance)
-
-                    #     writeSerial(1,abs(distance))
-                    # else:
-                    #     writeSerial(0,0)
                     # convex hull
                     hull = cv.convexHull(contour)
                     cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 1)
+                    hazards_contour_list.append(contour)
                     # print("hazard detected")
+
+            # print(hazards_contour_list)
             
             if GUI_THERMAL:
                 cv_render(filt_uint8, colormap='rainbow2')
@@ -241,7 +201,7 @@ while True:
         # change GUI in here
 
         # check if noir and thermal are ready
-        print(f"checking if image captured: {time.time()}")
+        # print(f"checking if image captured: {time.time()}")
         local_ready = False
         while not local_ready:
             lock.acquire()
@@ -252,7 +212,7 @@ while True:
         # time.sleep(0.5)
 
         # ready for another image
-        print(f"ready to capture image: {time.time()}")
+        # print(f"ready to capture image: {time.time()}")
         lock.acquire()
         noir_ready.value = 1
         thermal_ready.value = 1

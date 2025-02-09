@@ -8,4 +8,3 @@ smbus
 crcmod
 matplotlib
 pyserial
-shapely
