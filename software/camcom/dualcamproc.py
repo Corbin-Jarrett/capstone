@@ -74,14 +74,10 @@ def noircapture(noir_ready, thermal_ready, lock):
             frame_cropped = frame[30:380,120:560] # y, x
 
             # detect hand
-            # print(frame.size())
-            # frame_cropped = frame[80,62]
             # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             # detector = apriltag.Detector()
             # detections = detector.detect(gray)
             # print("[INFO] {} total AprilTags detected".format(len(detections)))
-
-
 
             if GUI_NOIR:
                 # cv.imshow("noir", frame) # display frame
