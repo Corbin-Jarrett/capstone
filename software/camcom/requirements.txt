@@ -1,0 +1,10 @@
+cmake
+opencv-python
+numpy
+picamera2
+apriltag
+cmapy
+smbus
+crcmod
+matplotlib
+pyserial
