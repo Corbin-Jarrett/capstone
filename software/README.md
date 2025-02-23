@@ -1,8 +1,23 @@
 # Software
 This Page outlines details about the software side of the project.
 
+## Folder Layout
+### demo-objdet
+An initial demo to detect colours and apriltags using openCV
+
+### noir
+Setup and basic code for the noir camera using picamera2 library
+
+### thermal
+Setup and basic code for the thermal camera using mi48
+
+### camcom
+Integration of thermal, noir, and serial communication.
+Implementing main project using multithreading then multiprocessing.
+
 ## Releases
-None right now
+1. dualcam.py
+Used in Rev 0 presentation for very basic hazard & hand detection. Also has LED feedback based on distance between hazard and hand.
 
 ## Documentation Standards
 
