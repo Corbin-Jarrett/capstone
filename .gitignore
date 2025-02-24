@@ -1,4 +1,5 @@
 myenv/
 __pycache__/
 sdkconfig
+sdkconfig.old
 build/
