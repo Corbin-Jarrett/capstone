@@ -1,7 +1,5 @@
 # Capstone Eyecan Multiprocessing with both cameras
 # import apriltag
-import sys
-# sys.path.append("/home/test/myenv/lib/python3.11/site-packages")
 import os
 import signal
 import time
@@ -20,7 +18,7 @@ from senxor.utils import data_to_frame, remap, cv_filter,\
 
 # change this to false if not interested in the image
 GUI_THERMAL = False
-GUI_NOIR = True
+GUI_NOIR = False
 
 # set cv_filter parameters
 par = {'blur_ks':3, 'd':5, 'sigmaColor': 27, 'sigmaSpace': 27}
@@ -43,11 +41,17 @@ def writeSerial(signal, user_distance):
     #transmit data serially
     ser.write(bytes(message, 'utf8'))  #create byte object with data string
 
-noir_ready = multiprocessing.Value('i', 0)
-thermal_ready = multiprocessing.Value('i', 0)
+# Shared process data
 lock = multiprocessing.Lock()
+noir_ready = multiprocessing.Value('i', 0, lock=lock)
+thermal_ready = multiprocessing.Value('i', 0, lock=lock)
+# Set up arrays for shared camera data
+manager = multiprocessing.Manager()
+arr_lock = manager.Lock()
+noir_data = manager.list([0]*10)
+thermal_data = manager.list([0]*10)
 
-def noircapture(noir_ready, thermal_ready, lock):
+def noircapture(noir_ready, thermal_ready, data):
     # initialize camera
     picam2 = Picamera2()
     # configurations (see documentation for details)
@@ -75,9 +79,7 @@ def noircapture(noir_ready, thermal_ready, lock):
             # keep checking if both readys are true
             # print("checking if ready in noir")
             while not local_ready:
-                lock.acquire()
                 local_ready = (noir_ready.value == 1) and (thermal_ready.value == 1)
-                lock.release()
 
             # print(f"noir capture time: {time.time()}")
             # capture next frame as 3D numpy array
@@ -105,9 +107,7 @@ def noircapture(noir_ready, thermal_ready, lock):
                     break
 
             # make noir ready false
-            lock.acquire()
             noir_ready.value = 0
-            lock.release()
 
         except KeyboardInterrupt:
             break
@@ -116,7 +116,7 @@ def noircapture(noir_ready, thermal_ready, lock):
     picam2.stop()
 
 
-def thermalcapture(noir_ready, thermal_ready, lock):
+def thermalcapture(noir_ready, thermal_ready, hazard_data):
     # Make an instance of the MI48, attaching USB for 
     # both control and data interface.
     mi48, connected_port, port_names = connect_senxor()
@@ -147,9 +147,7 @@ def thermalcapture(noir_ready, thermal_ready, lock):
             # keep checking if both readys are true
             # print("checking if ready in thermal")
             while not local_ready:
-                lock.acquire()
                 local_ready = (noir_ready.value == 1) and (thermal_ready.value == 1)
-                lock.release()
 
             # print(f"thermal capture time: {time.time()}")
 
@@ -172,21 +170,24 @@ def thermalcapture(noir_ready, thermal_ready, lock):
             thresh = (hazard_temp-min_temp)/(max_temp-min_temp)*(255-min_temp)
             ret, thresh_image_hazard = cv.threshold(remap(frame), thresh, 255, cv.THRESH_BINARY)
             contours_hazard, ret = cv.findContours(thresh_image_hazard, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            hazards_contour_list = []
+            hazard_count = 0
             # Loop through the contours and filter based on area to detect the hand
             for contour in contours_hazard:
                 area = cv.contourArea(contour)
                 #print(f"Contour area: {area}")  # Debugging line
                 # Filter out small contours that are likely noise
-                if area > 1:  # Adjust the minimum area based on hand size and image resolution
+                if area > 1:
+                    hazard_count += 1
+                    if hazard_count < 10:
+                        hazard_data[hazard_count] = contour
                     # convex hull
                     hull = cv.convexHull(contour)
                     cv.drawContours(filt_uint8, [hull], -1, (255,255,0), 1)
-                    hazards_contour_list.append(contour)
                     # print("hazard detected")
 
             # print(hazards_contour_list)
-            
+            hazard_data[0] = hazard_count
+
             if GUI_THERMAL:
                 cv_render(filt_uint8, colormap='rainbow2')
                 key = cv.waitKey(1)  # & 0xFF
@@ -194,9 +195,7 @@ def thermalcapture(noir_ready, thermal_ready, lock):
                     break
             
             # make thermal ready false
-            lock.acquire()
             thermal_ready.value = 0
-            lock.release()
 
         except KeyboardInterrupt:
             break
@@ -204,8 +203,8 @@ def thermalcapture(noir_ready, thermal_ready, lock):
     mi48.stop()
 
 # set up processes
-p1 = multiprocessing.Process(target=noircapture, args=(noir_ready, thermal_ready, lock))
-p2 = multiprocessing.Process(target=thermalcapture, args=(noir_ready, thermal_ready, lock))
+p1 = multiprocessing.Process(target=noircapture, args=(noir_ready, thermal_ready, noir_data))
+p2 = multiprocessing.Process(target=thermalcapture, args=(noir_ready, thermal_ready, thermal_data))
 p1.start()
 p2.start()
 
@@ -215,22 +214,19 @@ while True:
         # change GUI in here
 
         # check if noir and thermal are ready
-        # print(f"checking if image captured: {time.time()}")
+        print(f"checking if image captured: {time.time()}")
         local_ready = False
         while not local_ready:
-            lock.acquire()
             local_ready = (noir_ready.value == 0) and (thermal_ready.value == 0)
-            lock.release()
 
         # do some kind of processing
         # time.sleep(0.5)
+        # print(thermal_data)
 
         # ready for another image
-        # print(f"ready to capture image: {time.time()}")
-        lock.acquire()
+        print(f"ready to capture image: {time.time()}")
         noir_ready.value = 1
         thermal_ready.value = 1
-        lock.release()
 
         # time.sleep(0.5)
 
