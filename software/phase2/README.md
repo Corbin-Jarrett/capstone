@@ -5,6 +5,7 @@
 2. Activate venv ```source myenv/bin/activate```
 3. Install Requirements ```python -m pip install -r requirements.txt```
 4. Install system packages if missing using ```sudo apt install <package name>```
+    - pyqt6
 
 ## Background
 Phase 1 can capture frames from picamera and thermal cameras.
