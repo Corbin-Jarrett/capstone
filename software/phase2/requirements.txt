@@ -1,6 +1,4 @@
 cmake
-opencv-python
-numpy
 apriltag
 cmapy
 smbus
