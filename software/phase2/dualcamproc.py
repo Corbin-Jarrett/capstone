@@ -17,14 +17,21 @@ from senxor.utils import data_to_frame, remap, cv_filter,\
 
 
 # change this to false if not interested in the image
-GUI_THERMAL = False
-GUI_NOIR = False
+GUI_THERMAL = True
+GUI_NOIR = True
 
 # set cv_filter parameters
 par = {'blur_ks':3, 'd':5, 'sigmaColor': 27, 'sigmaSpace': 27}
 
-# threshold temperature
+# threshold temperature degrees celsius
 hazard_temp = 40
+
+# frame size of the thermal camera
+thermal_frame_x = 80
+thermal_frame_y = 62
+
+max_hazards = 9
+max_hands = 1
 
 dminav = RollingAverageFilter(N=10)
 dmaxav = RollingAverageFilter(N=10)
@@ -47,9 +54,8 @@ noir_ready = multiprocessing.Value('i', 0, lock=lock)
 thermal_ready = multiprocessing.Value('i', 0, lock=lock)
 # Set up arrays for shared camera data
 manager = multiprocessing.Manager()
-arr_lock = manager.Lock()
-noir_data = manager.list([0]*10)
-thermal_data = manager.list([0]*10)
+hand_data = manager.list([0]*(max_hands + 1))
+thermal_data = manager.list([0]*(max_hazards + 1))
 
 def noircapture(noir_ready, thermal_ready, data):
     # initialize camera
@@ -65,10 +71,10 @@ def noircapture(noir_ready, thermal_ready, data):
     # Initialize MediaPipe Hands
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(
-        static_image_mode=False,  # False for real-time tracking
-        max_num_hands=2,  # Detect up to 2 hands
-        min_detection_confidence=0.5,  # Confidence threshold
-        min_tracking_confidence=0.5
+        static_image_mode = False,  # False for real-time tracking
+        max_num_hands = max_hands,  # Detect up to max_hands hand
+        min_detection_confidence = 0.5,  # Confidence threshold
+        min_tracking_confidence = 0.5
     )
     mp_draw = mp.solutions.drawing_utils  # Utility to draw landmarks
 
@@ -83,21 +89,25 @@ def noircapture(noir_ready, thermal_ready, data):
 
             # print(f"noir capture time: {time.time()}")
             # capture next frame as 3D numpy array
-            frame = picam2.capture_array()
-            frame_cropped = frame[30:380,120:560] # y, x
+            frame_cropped = picam2.capture_array()[30:380,120:560] # y, x
 
             # detect hand
             results = hands.process(frame_cropped)
 
+            hand_count = 0
+
             # draw hand landmarks if detected
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
+                    hand_count += 1
+                    temp = [0]*21
+                    # hand_data[hand_count]
                     mp_draw.draw_landmarks(frame_cropped, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-
-            # gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            # detector = apriltag.Detector()
-            # detections = detector.detect(gray)
-            # print("[INFO] {} total AprilTags detected".format(len(detections)))
+                    for i, landmark in enumerate(hand_landmarks.landmark):
+                        temp[i] = [int(thermal_frame_x*landmark.x), int(thermal_frame_y*landmark.y)]
+                        # print(f"Landmark {i}: x={scaled_x}, y={scaled_y}")
+                    hand_data[hand_count] = temp
+            hand_data[0] = hand_count
 
             if GUI_NOIR:
                 # cv.imshow("noir", frame) # display frame
@@ -122,8 +132,7 @@ def thermalcapture(noir_ready, thermal_ready, hazard_data):
     mi48, connected_port, port_names = connect_senxor()
 
     # set desired FPS
-    STREAM_FPS = 20
-    mi48.set_fps(STREAM_FPS)
+    mi48.set_fps(20)
 
     # see if filtering is available in MI48 and set it up
     mi48.disable_filter(f1=True, f2=True, f3=True)
@@ -161,7 +170,7 @@ def thermalcapture(noir_ready, thermal_ready, hazard_data):
             #regular image
             min_temp = dminav(data.min())  # + 1.5
             max_temp = dmaxav(data.max())  # - 1.5
-            frame = cv.flip(data_to_frame(data, (80,62), hflip=False),0)
+            frame = cv.flip(data_to_frame(data, (thermal_frame_x,thermal_frame_y), hflip=False),0)
             # frame2 = np.clip(frame, min_temp, max_temp)
             filt_uint8 = cv_filter(remap(frame), par, use_median=True,
                                 use_bilat=True, use_nlm=False)
@@ -178,7 +187,7 @@ def thermalcapture(noir_ready, thermal_ready, hazard_data):
                 # Filter out small contours that are likely noise
                 if area > 1:
                     hazard_count += 1
-                    if hazard_count < 10:
+                    if hazard_count <= max_hazards:
                         hazard_data[hazard_count] = contour
                     # convex hull
                     hull = cv.convexHull(contour)
@@ -203,7 +212,7 @@ def thermalcapture(noir_ready, thermal_ready, hazard_data):
     mi48.stop()
 
 # set up processes
-p1 = multiprocessing.Process(target=noircapture, args=(noir_ready, thermal_ready, noir_data))
+p1 = multiprocessing.Process(target=noircapture, args=(noir_ready, thermal_ready, hand_data))
 p2 = multiprocessing.Process(target=thermalcapture, args=(noir_ready, thermal_ready, thermal_data))
 p1.start()
 p2.start()
@@ -214,17 +223,20 @@ while True:
         # change GUI in here
 
         # check if noir and thermal are ready
-        print(f"checking if image captured: {time.time()}")
+        # print(f"checking if image captured: {time.time()}")
         local_ready = False
         while not local_ready:
             local_ready = (noir_ready.value == 0) and (thermal_ready.value == 0)
 
         # do some kind of processing
+
+
         # time.sleep(0.5)
-        # print(thermal_data)
+        print(thermal_data)
+        print(hand_data)
 
         # ready for another image
-        print(f"ready to capture image: {time.time()}")
+        # print(f"ready to capture image: {time.time()}")
         noir_ready.value = 1
         thermal_ready.value = 1
 
