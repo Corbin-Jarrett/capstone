@@ -26,6 +26,9 @@ par = {'blur_ks':3, 'd':5, 'sigmaColor': 27, 'sigmaSpace': 27}
 # threshold temperature degrees celsius
 hazard_temp = 40
 
+# scaling factor from pixels to cm
+scale_factor = 1.08
+
 # frame size of the thermal camera
 thermal_frame_x = 80
 thermal_frame_y = 62
@@ -89,7 +92,7 @@ def noircapture(noir_ready, thermal_ready, data):
 
             # print(f"noir capture time: {time.time()}")
             # capture next frame as 3D numpy array
-            frame_cropped = picam2.capture_array()[30:380,120:560] # y, x
+            frame_cropped = picam2.capture_array()[30:340,120:550] # y, x
 
             # detect hand
             results = hands.process(frame_cropped)
@@ -186,8 +189,8 @@ def thermalcapture(noir_ready, thermal_ready, hazard_data):
                 #print(f"Contour area: {area}")  # Debugging line
                 # Filter out small contours that are likely noise
                 if area > 1:
-                    hazard_count += 1
-                    if hazard_count <= max_hazards:
+                    if hazard_count < max_hazards:
+                        hazard_count += 1
                         hazard_data[hazard_count] = contour
                     # convex hull
                     hull = cv.convexHull(contour)
@@ -228,15 +231,27 @@ while True:
         while not local_ready:
             local_ready = (noir_ready.value == 0) and (thermal_ready.value == 0)
 
-        # do some kind of processing
+        # go through each hazard contour and find distance to each hand point
+        dist_array = []
+        num_hazards = thermal_data[0]
+        num_hands = hand_data[0]
+        for i in range(num_hazards):
+            contour = thermal_data[i+1]
 
+            for j in range(num_hands):
+                for point in hand_data[j+1]:
+                    dist = cv.pointPolygonTest(contour,point,True)
+                    # print(f"distance between hazard {i} and point {point}: {dist}")
+                    dist_array.append(dist)
 
-        # time.sleep(0.5)
-        print(thermal_data)
-        print(hand_data)
+        if dist_array:
+            pixel_distance = scale_factor*(max(dist_array))
+            print(f"closest distance: {pixel_distance}")
+        # print(thermal_data)
+        # print(hand_data)
 
         # ready for another image
-        # print(f"ready to capture image: {time.time()}")
+        print(f"ready to capture image: {time.time()}")
         noir_ready.value = 1
         thermal_ready.value = 1
 
