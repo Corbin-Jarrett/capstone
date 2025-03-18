@@ -1,6 +1,6 @@
 '''
  4TB6 Capstone Project - EyeCan
- RPi Python Code to connect to ESP via ble and send command
+ Python Code to connect to ESP via ble and send command
 '''
 
 import asyncio

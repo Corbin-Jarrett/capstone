@@ -21,7 +21,10 @@
 #include "sdkconfig.h"
 #include "driver/gpio.h"
 
-#define LED_GPIO 13 // GPIO 13
+// GPIOs used 12, 13, 34
+#define LED_GPIO_1 12 // GPIO 12
+#define LED_GPIO_2 13 // GPIO 13
+#define LED_GPIO_3 34 // GPIO 34
 #define BLINK_PERIOD 1000 // 1 sec
 #define DELIMITER ", "
 #define KEEP_ALIVE_INTERVAL_MS 5000  // Send keep-alive every 5 seconds
@@ -41,14 +44,20 @@ static int threshold_1 = -1;   // slower pattern
 static int threshold_2 = -1;   // faster pattern
 
 // GPIO Initialization
-static void configure_led(void) {
-  gpio_reset_pin(LED_GPIO);
+static void configure_leds(void) {
+  gpio_reset_pin(LED_GPIO_1);
+  gpio_reset_pin(LED_GPIO_2);
+  //gpio_reset_pin(LED_GPIO_3);
 
-  // Set the GPIO as a push/pull output 
-  gpio_set_direction(LED_GPIO, GPIO_MODE_INPUT_OUTPUT);
+  // Set the GPIOs as a push/pull output 
+  gpio_set_direction(LED_GPIO_1, GPIO_MODE_INPUT_OUTPUT);
+  gpio_set_direction(LED_GPIO_2, GPIO_MODE_INPUT_OUTPUT);
+  //gpio_set_direction(LED_GPIO_3, GPIO_MODE_INPUT);
 
-  // Start GPIO as off 
-  gpio_set_level(LED_GPIO, false);
+  // Start GPIOs as off 
+  gpio_set_level(LED_GPIO_1, false);
+  gpio_set_level(LED_GPIO_2, false);
+  //gpio_set_level(LED_GPIO_3, false);
 }
 
 void ble_app_advertise(void);
@@ -88,6 +97,7 @@ static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_g
     if (token != NULL) threshold_1 = atoi(token); 
     token = strtok(NULL, DELIMITER); 
     if (token != NULL) threshold_2 = atoi(token);
+
     printf("Signal: %d\n", rpi_signal);
     printf("User Distance: %d\n", user_distance);
     printf("Threshold 1: %d\n", threshold_1);
@@ -151,7 +161,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg) {
         if (event->connect.status == 0) {
             conn_id = event->connect.conn_handle;
             ESP_LOGI("BLE", "Connected! connection handle = %d", conn_id);
-            xTaskCreate(send_keep_alive, "keep_alive_task", 4096, NULL, 5, NULL);
+            //xTaskCreate(send_keep_alive, "keep_alive_task", 4096, NULL, 5, NULL);
         }
         else {
             ble_app_advertise();
@@ -234,7 +244,7 @@ void app_main() {
     int led_pattern = -1;
 
     // configuration
-    configure_led();
+    configure_leds();
     connect_ble();
 
     while(1) {
@@ -244,38 +254,53 @@ void app_main() {
                 printf("LED On, No connection alert\n");
                 led_pattern = 0;
             }
-            gpio_set_level(LED_GPIO, true);
-            vTaskDelay(pdMS_TO_TICKS(100)); // 100 ms 
+            led_state = gpio_get_level(LED_GPIO_1);
+            gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
+            gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
+            //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
+            if ( (!led_state) == true) {
+                vTaskDelay((BLINK_PERIOD/2) / portTICK_PERIOD_MS); // wait 1/2 period
+            }
+            else {
+                vTaskDelay((BLINK_PERIOD*5) / portTICK_PERIOD_MS); // wait 5 periods
+            }
+            //vTaskDelay(pdMS_TO_TICKS(100)); // 100 ms 
         }
         // Off case and slight delay to prevent useless/extremely close cycles and overuse of CPU
-        else if (user_distance > threshold_1 || threshold_1 == -1 || user_distance == -1) {
+        else if ( (user_distance < 0 && abs(user_distance) > threshold_1) || threshold_1 == -1 ) {
             if (led_pattern != 1) {
                 printf("LED Off\n");
                 led_pattern = 1;
             }
-            gpio_set_level(LED_GPIO, false);
+            gpio_set_level(LED_GPIO_1, false);
+            gpio_set_level(LED_GPIO_2, false);
+            //gpio_set_level(LED_GPIO_3, false);
             // Prevent CPU hogging between app main and interrupt task
             vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms 
             //! can change to 10 for 10 ms if LED responsiveness is slow
         }
-        // Fastest output case for within smallest threshold
-        else if (user_distance <= threshold_2) {
+        // Fastest output case for within smallest threshold, when user_distance is positive user is within hazard
+        else if ( (user_distance < 0 && abs(user_distance) <= threshold_2) || user_distance > 0) {
             if (led_pattern != 2) {
                 printf("Blink LED (Closer Threshold)\n");
                 led_pattern = 2;
             }
-            led_state = gpio_get_level(LED_GPIO);
-            gpio_set_level(LED_GPIO, !led_state); // switch the LED state
+            led_state = gpio_get_level(LED_GPIO_1);
+            gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
+            gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
+            //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
             vTaskDelay((BLINK_PERIOD/4) / portTICK_PERIOD_MS); // wait 1/4 period
         }   
         // Slower output case for between largest and smallest threshold   
-        else if (user_distance <= threshold_1) {
+        else if (user_distance < 0 && abs(user_distance) <= threshold_1) {
             if (led_pattern != 3) {
                 printf("Blink LED (Further Threshold)\n");
                 led_pattern = 3;
             }
-            led_state = gpio_get_level(LED_GPIO);
-            gpio_set_level(LED_GPIO, !led_state); // switch the LED state
+            led_state = gpio_get_level(LED_GPIO_1);
+            gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
+            gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
+            //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
             vTaskDelay(BLINK_PERIOD / portTICK_PERIOD_MS); // wait 1 period 
         }
     }
