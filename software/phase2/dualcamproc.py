@@ -15,6 +15,22 @@ from senxor.utils import data_to_frame, remap, cv_filter,\
                          cv_render, RollingAverageFilter,\
                          connect_senxor
 
+# for ble connection
+import asyncio
+from bleak import BleakClient, BleakScanner, BleakError
+
+# ble constants 
+
+# UUIDs (Must match the ESP32 code)
+ESP32_SERVICE_UUID = "0000181A-0000-1000-8000-00805F9B34FB"
+READ_CHAR_UUID = "0000FEF4-0000-1000-8000-00805F9B34FB"
+WRITE_CHAR_UUID = "0000DEAD-0000-1000-8000-00805F9B34FB"
+# global variables
+delim = ', '
+signal = 1
+threshold_1 = 10
+threshold_2 = 5
+esp32_address = None
 
 # change this to false if not interested in the image
 GUI_THERMAL = True
@@ -39,18 +55,6 @@ max_hands = 1
 dminav = RollingAverageFilter(N=10)
 dmaxav = RollingAverageFilter(N=10)
 
-# set up serial connection to ESP
-ser = serial.Serial ("/dev/ttyS0", 115200)      #Open port with baud rate
-# function to write data to ESP. user_distance is in cm
-def writeSerial(signal, user_distance):
-    delim = ', '
-    threshold_1 = 30 # needs to be minimum 30
-    threshold_2 = 5
-
-    message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
-    #transmit data serially
-    ser.write(bytes(message, 'utf8'))  #create byte object with data string
-
 # Shared process data
 lock = multiprocessing.Lock()
 noir_ready = multiprocessing.Value('i', 0, lock=lock)
@@ -59,6 +63,30 @@ thermal_ready = multiprocessing.Value('i', 0, lock=lock)
 manager = multiprocessing.Manager()
 hand_data = manager.list([0]*(max_hands + 1))
 thermal_data = manager.list([0]*(max_hazards + 1))
+
+async def find_esp32():
+    # Scan for BLE devices and return the address of ESP32. 
+    print("Scanning for ESP32 BLE server...")
+    devices = await BleakScanner.discover()
+    
+    for device in devices:
+        if device.name == None:
+            continue
+        if "BLE-Server-EyeCan" in device.name:  # Match the ESP32 device name
+            print(device)
+            print(f"Found ESP32: {device.address}")
+            return device.address
+    return None
+
+async def ble_message(client, user_distance, threshold_outer=-1):            
+        # Write message to ESP32
+        if not client.is_connected:
+            print("CLIENT IS NOT CONNECTED")
+            return
+        message = str(signal) + delim + str(user_distance) + delim + str(threshold_outer) + delim + str(threshold_2) + '\r'
+        print(f"Sending: {message}")
+        await client.write_gatt_char(WRITE_CHAR_UUID, message.encode(), response=True)
+        print("Message sent!")
 
 def noircapture(noir_ready, thermal_ready, data):
     # initialize camera
@@ -214,51 +242,77 @@ def thermalcapture(noir_ready, thermal_ready, hazard_data):
     # close it once finished the while loop
     mi48.stop()
 
+# Connect to ESP32
+esp32_address = asyncio.run(find_esp32())
+while not esp32_address:
+    print("ESP32 not found. Make sure it's advertising.")
+    esp32_address = asyncio.run(find_esp32())
+    
 # set up processes
 p1 = multiprocessing.Process(target=noircapture, args=(noir_ready, thermal_ready, hand_data))
 p2 = multiprocessing.Process(target=thermalcapture, args=(noir_ready, thermal_ready, thermal_data))
 p1.start()
 p2.start()
 
-# main while loop
-while True:
-    try:
-        # change GUI in here
 
-        # check if noir and thermal are ready
-        # print(f"checking if image captured: {time.time()}")
-        local_ready = False
-        while not local_ready:
-            local_ready = (noir_ready.value == 0) and (thermal_ready.value == 0)
+async def main():
+    while True:
+        try:
+            async with BleakClient(esp32_address, timeout=10.0) as client:
+                print(f"Connected to {esp32_address}")
 
-        # go through each hazard contour and find distance to each hand point
-        dist_array = []
-        num_hazards = thermal_data[0]
-        num_hands = hand_data[0]
-        for i in range(num_hazards):
-            contour = thermal_data[i+1]
+                await asyncio.sleep(5)  # Add delay for ESP32 to stabilize connection
 
-            for j in range(num_hands):
-                for point in hand_data[j+1]:
-                    dist = cv.pointPolygonTest(contour,point,True)
-                    # print(f"distance between hazard {i} and point {point}: {dist}")
-                    dist_array.append(dist)
+                # main while loop
+                while client.is_connected:
+                    #try:
+                        # change GUI in here
 
-        if dist_array:
-            pixel_distance = scale_factor*(max(dist_array))
-            print(f"closest distance: {pixel_distance}")
-        # print(thermal_data)
-        # print(hand_data)
+                        # check if noir and thermal are ready
+                        # print(f"checking if image captured: {time.time()}")
+                        local_ready = False
+                        while not local_ready:
+                            local_ready = (noir_ready.value == 0) and (thermal_ready.value == 0)
 
-        # ready for another image
-        print(f"ready to capture image: {time.time()}")
-        noir_ready.value = 1
-        thermal_ready.value = 1
+                        # go through each hazard contour and find distance to each hand point
+                        dist_array = []
+                        num_hazards = thermal_data[0]
+                        num_hands = hand_data[0]
+                        for i in range(num_hazards):
+                            contour = thermal_data[i+1]
 
-        # time.sleep(0.5)
+                            for j in range(num_hands):
+                                for point in hand_data[j+1]:
+                                    dist = cv.pointPolygonTest(contour,point,True)
+                                    # print(f"distance between hazard {i} and point {point}: {dist}")
+                                    dist_array.append(dist)
 
-    except KeyboardInterrupt:
-        break
+                        if dist_array:
+                            pixel_distance = max(dist_array)
+                            cm_distance = scale_factor*pixel_distance
+                            print(f"closest distance: {cm_distance} cm")
+                            await ble_message(client, cm_distance, threshold_1)
+                        else:
+                            await ble_message(client, 0)
+                        # print(thermal_data)
+                        # print(hand_data)
+
+
+                        # ready for another image
+                        # print(f"ready to capture image: {time.time()}")
+                        noir_ready.value = 1
+                        thermal_ready.value = 1
+
+        except BleakError as e:
+            print(f"Connection failed: {e}. Retrying in 1 second...")
+
+        except KeyboardInterrupt:
+            return
+
+        # await asyncio.sleep(1)  # Wait before reconnecting
+
+
+asyncio.run(main())
 
 # wait for them to finish
 p1.join()

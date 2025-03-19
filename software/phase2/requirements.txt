@@ -7,3 +7,5 @@ matplotlib
 pyserial
 imutils
 mediapipe
+asyncio
+bleak
