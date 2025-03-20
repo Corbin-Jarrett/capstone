@@ -18,7 +18,7 @@ while True:
     ser.write(bytes(message, 'utf8'))  #create byte object with data string
     print('Raspberry Pi 4b data sent: ' + message + '\n')
     sleep(5)
-    
+
     # send distance within closer threshold
     user_distance = 3
     message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
@@ -26,7 +26,7 @@ while True:
     ser.write(bytes(message, 'utf8'))  #create byte object with data string
     print('Raspberry Pi 4b data sent: ' + message + '\n')
     sleep(5)
-    
+
     # send out of threshold distance to turn off LEDs
     user_distance = 12
     message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
