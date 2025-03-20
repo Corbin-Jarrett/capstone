@@ -1,7 +1,7 @@
 /*
  * 4TB6 Capstone Project - EyeCan
  * ESP code to create BLE server
- * 
+ *
  * ESP IDF 5.4
  */
 
@@ -38,9 +38,9 @@ bool status = false;
 static uint16_t conn_id = 1;  // connection ID when client connects
 
 // Global variables will be read from RPi
-static int rpi_signal = -1;    
-static int user_distance = -1; 
-static int threshold_1 = -1;   // slower pattern 
+static int rpi_signal = -1;
+static int user_distance = -1;
+static int threshold_1 = -1;   // slower pattern
 static int threshold_2 = -1;   // faster pattern
 
 // GPIO Initialization
@@ -49,12 +49,12 @@ static void configure_leds(void) {
   gpio_reset_pin(LED_GPIO_2);
   //gpio_reset_pin(LED_GPIO_3);
 
-  // Set the GPIOs as a push/pull output 
+  // Set the GPIOs as a push/pull output
   gpio_set_direction(LED_GPIO_1, GPIO_MODE_INPUT_OUTPUT);
   gpio_set_direction(LED_GPIO_2, GPIO_MODE_INPUT_OUTPUT);
   //gpio_set_direction(LED_GPIO_3, GPIO_MODE_INPUT);
 
-  // Start GPIOs as off 
+  // Start GPIOs as off
   gpio_set_level(LED_GPIO_1, false);
   gpio_set_level(LED_GPIO_2, false);
   //gpio_set_level(LED_GPIO_3, false);
@@ -69,7 +69,7 @@ static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_g
     char *str_data = malloc(len + 1);
 
     if (str_data != NULL) { // malloc sucess check
-        memcpy(str_data, bin_data, len);  
+        memcpy(str_data, bin_data, len);
         str_data[len] = ',';      // delimiter
         str_data[len + 1] = '\0'; // null termination
     }
@@ -77,9 +77,9 @@ static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_g
     printf("Data from the client: %.*s\n", len, str_data);
 
     // Reset global variables
-    rpi_signal = -1;    
-    user_distance = -1; 
-    threshold_1 = -1;   // slower pattern 
+    rpi_signal = -1;
+    user_distance = -1;
+    threshold_1 = -1;   // slower pattern
     threshold_2 = -1;   // faster pattern
 
     // Copy data to avoid modifying original buffer
@@ -91,11 +91,11 @@ static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_g
     char * token;
     token = strtok(str_data_copy, DELIMITER);
     if (token != NULL) rpi_signal = atoi(token);
-    token = strtok(NULL, DELIMITER); 
+    token = strtok(NULL, DELIMITER);
     if (token != NULL) user_distance = atoi(token);
-    token = strtok(NULL, DELIMITER); 
-    if (token != NULL) threshold_1 = atoi(token); 
-    token = strtok(NULL, DELIMITER); 
+    token = strtok(NULL, DELIMITER);
+    if (token != NULL) threshold_1 = atoi(token);
+    token = strtok(NULL, DELIMITER);
     if (token != NULL) threshold_2 = atoi(token);
 
     printf("Signal: %d\n", rpi_signal);
@@ -133,7 +133,7 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
 void send_keep_alive(void *arg) {
     while(1) {
         if (conn_id != 1) {  // if connected
-            struct os_mbuf *om = ble_hs_mbuf_from_flat("KEEP ALIVE", 10);  
+            struct os_mbuf *om = ble_hs_mbuf_from_flat("KEEP ALIVE", 10);
             int return_code = ble_gattc_notify_custom(conn_id, 0xFEF4, om);
             if (return_code == 0) {
                 ESP_LOGI("BLE", "Sent Keep-Alive Message");
@@ -153,7 +153,7 @@ void send_keep_alive(void *arg) {
 
 
 // BLE event handling
-static int ble_gap_event(struct ble_gap_event *event, void *arg) {  
+static int ble_gap_event(struct ble_gap_event *event, void *arg) {
     switch (event->type) {
     // Advertise if connected
     case BLE_GAP_EVENT_CONNECT:
@@ -172,9 +172,9 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg) {
         ESP_LOGI("GAP", "BLE GAP EVENT DISCONNECTED");
         conn_id = 1;  // reset connection ID
         // Reset global variables
-        rpi_signal = -1;    
-        user_distance = -1; 
-        threshold_1 = -1;   // slower pattern 
+        rpi_signal = -1;
+        user_distance = -1;
+        threshold_1 = -1;   // slower pattern
         threshold_2 = -1;   // faster pattern
         if (event->connect.status != 0) {
             ble_app_advertise();
@@ -207,7 +207,7 @@ void ble_app_advertise(void) {
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND; // connectable or non-connectable
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN; // discoverable or non-discoverable
     // max and min commented out left to be asap
-    //adv_params.itvl_min = (20 / 0.625); // 20 ms 
+    //adv_params.itvl_min = (20 / 0.625); // 20 ms
     //adv_params.itvl_max = (50 / 0.625); // 50 ms
     ble_gap_adv_start(ble_addr_type, NULL, BLE_HS_FOREVER, &adv_params, ble_gap_event, NULL);
     vTaskDelay(pdMS_TO_TICKS(1000));  // delay for 1 second to ensure advertising is active
@@ -229,16 +229,16 @@ void connect_ble(void) {
     nvs_flash_init();                          // 1 - Initialize NVS flash using
     // esp_nimble_hci_and_controller_init();   // 2 - Initialize ESP controller ** do this in menuconfig settings as outlined in README
     nimble_port_init();                        // 3 - Initialize the host stack
-    ble_svc_gap_device_name_set(TAG); // 4 - Initialize NimBLE configuration - server name
+    ble_svc_gap_device_name_set(TAG);          // 4 - Initialize NimBLE configuration - server name
     ble_svc_gap_init();                        // 4 - Initialize NimBLE configuration - gap service
     ble_svc_gatt_init();                       // 4 - Initialize NimBLE configuration - gatt service
     ble_gatts_count_cfg(gatt_svcs);            // 4 - Initialize NimBLE configuration - config gatt services
-    ble_gatts_add_svcs(gatt_svcs);             // 4 - Initialize NimBLE configuration - queues gatt services.
+    ble_gatts_add_svcs(gatt_svcs);             // 4 - Initialize NimBLE configuration - queues gatt services
     ble_hs_cfg.sync_cb = ble_app_on_sync;      // 5 - Initialize application
     nimble_port_freertos_init(host_task);      // 6 - Run the thread
 }
 
- 
+
 void app_main() {
     int led_state;
     int led_pattern = -1;
@@ -248,7 +248,7 @@ void app_main() {
     connect_ble();
 
     while(1) {
-        // Disconnected case, alert user with constant On 
+        // Disconnected case, alert user with constant On
         if (conn_id == 1) {
             if (led_pattern != 0) {
                 printf("LED On, No connection alert\n");
@@ -264,7 +264,7 @@ void app_main() {
             else {
                 vTaskDelay((BLINK_PERIOD*5) / portTICK_PERIOD_MS); // wait 5 periods
             }
-            //vTaskDelay(pdMS_TO_TICKS(100)); // 100 ms 
+            //vTaskDelay(pdMS_TO_TICKS(100)); // 100 ms
         }
         // Off case and slight delay to prevent useless/extremely close cycles and overuse of CPU
         else if ( (user_distance < 0 && abs(user_distance) > threshold_1) || threshold_1 == -1 ) {
@@ -276,7 +276,7 @@ void app_main() {
             gpio_set_level(LED_GPIO_2, false);
             //gpio_set_level(LED_GPIO_3, false);
             // Prevent CPU hogging between app main and interrupt task
-            vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms 
+            vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms
             //! can change to 10 for 10 ms if LED responsiveness is slow
         }
         // Fastest output case for within smallest threshold, when user_distance is positive user is within hazard
@@ -290,8 +290,8 @@ void app_main() {
             gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
             //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
             vTaskDelay((BLINK_PERIOD/4) / portTICK_PERIOD_MS); // wait 1/4 period
-        }   
-        // Slower output case for between largest and smallest threshold   
+        }
+        // Slower output case for between largest and smallest threshold
         else if (user_distance < 0 && abs(user_distance) <= threshold_1) {
             if (led_pattern != 3) {
                 printf("Blink LED (Further Threshold)\n");
@@ -301,7 +301,7 @@ void app_main() {
             gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
             gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
             //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
-            vTaskDelay(BLINK_PERIOD / portTICK_PERIOD_MS); // wait 1 period 
+            vTaskDelay(BLINK_PERIOD / portTICK_PERIOD_MS); // wait 1 period
         }
     }
 }

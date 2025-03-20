@@ -19,10 +19,10 @@ READ_CHAR_UUID = "0000FEF4-0000-1000-8000-00805F9B34FB"
 WRITE_CHAR_UUID = "0000DEAD-0000-1000-8000-00805F9B34FB"
 
 async def find_esp32():
-    # Scan for BLE devices and return the address of ESP32. 
+    # Scan for BLE devices and return the address of ESP32.
     print("Scanning for ESP32 BLE server...")
     devices = await BleakScanner.discover()
-    
+
     for device in devices:
         if device.name == None:
             continue
@@ -38,7 +38,7 @@ async def main():
     while not esp32_address:
         print("ESP32 not found. Make sure it's advertising.")
         esp32_address = await find_esp32()
-    
+
     async with BleakClient(esp32_address) as client:
         print(f"Connected to {esp32_address}")
 
