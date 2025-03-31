@@ -9,6 +9,7 @@ from picamera2 import Picamera2
 import multiprocessing
 import cv2 as cv
 import mediapipe as mp
+import math
 
 from senxor.mi48 import MI48, format_header, format_framestats
 from senxor.utils import data_to_frame, remap, cv_filter,\
@@ -33,7 +34,7 @@ threshold_2 = 5
 esp32_address = None
 
 # change this to false if not interested in the image
-GUI_THERMAL = True
+GUI_THERMAL = False
 GUI_NOIR = True
 
 # set cv_filter parameters
@@ -61,7 +62,7 @@ noir_ready = multiprocessing.Value('i', 0, lock=lock)
 thermal_ready = multiprocessing.Value('i', 0, lock=lock)
 # Set up arrays for shared camera data
 manager = multiprocessing.Manager()
-hand_data = manager.list([0]*(max_hands + 1))
+hand_data = manager.list([0]*(max_hands + 2)) # adding one for hand count and one for depth
 thermal_data = manager.list([0]*(max_hazards + 1))
 
 async def find_esp32():
@@ -85,7 +86,7 @@ async def ble_message(client, user_distance, threshold_outer=-1):
             return
         message = str(signal) + delim + str(user_distance) + delim + str(threshold_outer) + delim + str(threshold_2) + '\r'
         print(f"Sending: {message}")
-        await client.write_gatt_char(WRITE_CHAR_UUID, message.encode(), response=True)
+        await client.write_gatt_char(WRITE_CHAR_UUID, message.encode(), response=False) # not currently handling response so will continue immediately
         print("Message sent!")
 
 def noircapture(noir_ready, thermal_ready, data):
@@ -100,6 +101,8 @@ def noircapture(noir_ready, thermal_ready, data):
     picam2.start(config=video_config)
 
     # Initialize MediaPipe Hands
+    '''Corbin, we should try playing around with the confidence thresholds to see if this improves 
+    issues with losing the hand. '''
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(
         static_image_mode = False,  # False for real-time tracking
@@ -137,7 +140,11 @@ def noircapture(noir_ready, thermal_ready, data):
                     for i, landmark in enumerate(hand_landmarks.landmark):
                         temp[i] = [int(thermal_frame_x*landmark.x), int(thermal_frame_y*landmark.y)]
                         # print(f"Landmark {i}: x={scaled_x}, y={scaled_y}")
-                    hand_data[hand_count] = temp
+                    hand_data[hand_count + 1] = temp
+                    wrist_landmark = hand_landmarks.landmark[0]
+                    index_finger_mcp_landmark = hand_landmarks.landmark[5]
+                    depth_dist = math.sqrt(((wrist_landmark.x - index_finger_mcp_landmark.x)**2)+((wrist_landmark.y-index_finger_mcp_landmark.y)**2))
+                    hand_data[1] = depth_dist
             hand_data[0] = hand_count
 
             if GUI_NOIR:
@@ -261,7 +268,7 @@ async def main():
             async with BleakClient(esp32_address, timeout=10.0) as client:
                 print(f"Connected to {esp32_address}")
 
-                await asyncio.sleep(5)  # Add delay for ESP32 to stabilize connection
+                await asyncio.sleep(2)  # Add delay for ESP32 to stabilize connection
 
                 # main while loop
                 while client.is_connected:
@@ -278,11 +285,12 @@ async def main():
                         dist_array = []
                         num_hazards = thermal_data[0]
                         num_hands = hand_data[0]
+                        hand_depth = 232*(hand_data[1]-0.125) # numbers come from manual calibration
                         for i in range(num_hazards):
                             contour = thermal_data[i+1]
 
                             for j in range(num_hands):
-                                for point in hand_data[j+1]:
+                                for point in hand_data[j+2]:
                                     dist = cv.pointPolygonTest(contour,point,True)
                                     # print(f"distance between hazard {i} and point {point}: {dist}")
                                     dist_array.append(dist)
@@ -290,7 +298,8 @@ async def main():
                         if dist_array:
                             pixel_distance = max(dist_array)
                             cm_distance = scale_factor*pixel_distance
-                            print(f"closest distance: {cm_distance} cm")
+                            dist_3d = (math.sqrt((cm_distance**2) + (hand_depth**2))) - 5   # set 5 cm as height of hazard
+                            print(f"closest distance: {dist_3d} cm")
                             await ble_message(client, cm_distance, threshold_1)
                         else:
                             await ble_message(client, 0)
@@ -305,11 +314,14 @@ async def main():
 
         except BleakError as e:
             print(f"Connection failed: {e}. Retrying in 1 second...")
+            await asyncio.sleep(1)  # Wait before reconnecting
+
+        except TimeoutError:
+            print(f"Connection Timeout. Retrying in 1 second...")
+            await asyncio.sleep(1)  # Wait before reconnecting
 
         except KeyboardInterrupt:
             return
-
-        # await asyncio.sleep(1)  # Wait before reconnecting
 
 
 asyncio.run(main())
