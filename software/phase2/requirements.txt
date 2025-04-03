@@ -1,10 +1,8 @@
 cmake
-apriltag
 cmapy
 smbus
 crcmod
 matplotlib
-pyserial
 imutils
 mediapipe
 asyncio

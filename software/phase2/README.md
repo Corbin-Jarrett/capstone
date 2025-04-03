@@ -1,13 +1,15 @@
 # Phase 2
 
 ## Setup
-1. Make a virtual environment using ```python3 -m venv --system-site-packages myenv```
-2. Activate venv ```source myenv/bin/activate```
-3. Install Requirements ```python -m pip install -r requirements.txt```
-4. Exit the virtual environment ```deactivate``` and install system packages if missing using ```sudo apt install python3-<package name>```
-    - pyqt6
-    - opencv
 
+1. Install system packages if missing using ```sudo apt install python3-<package name>```
+	- pyqt6
+	- python3-opencv
+2. Make a virtual environment using ```python3 -m venv --system-site-packages myenv```
+3. Activate venv ```source myenv/bin/activate```
+4. Install Requirements ```python -m pip install -r requirements.txt```
+5. Ensure hardware is connected and run eyecan.py
+ 
 ## Background
 Phase 1 can capture frames from picamera and thermal cameras.
 This data can be processed and camera feeds displayed.
