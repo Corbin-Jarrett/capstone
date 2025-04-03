@@ -46,9 +46,9 @@ async def main():
         #read_data = await client.read_gatt_char(READ_CHAR_UUID)
         #print(f"Received from ESP32: {read_data.decode()}")
 
-        while (1):
+        while True:
             # Write message to ESP32
-            for user_distance in [8, 4, 12]:
+            for user_distance in [-8, -4, -12]:
                 message = str(signal) + delim + str(user_distance) + delim + str(threshold_1) + delim + str(threshold_2) + '\r'
                 print(f"Sending: {message}")
                 await client.write_gatt_char(WRITE_CHAR_UUID, message.encode(), response=True)

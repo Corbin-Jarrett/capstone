@@ -21,10 +21,12 @@
 #include "sdkconfig.h"
 #include "driver/gpio.h"
 
-// GPIOs used 12, 13, 34
-#define LED_GPIO_1 12 // GPIO 12
-#define LED_GPIO_2 13 // GPIO 13
-#define LED_GPIO_3 34 // GPIO 34
+// GPIOs used 2, 4, 8, 12, and 13
+#define GREEN_LED_GPIO 2  // GPIO 2
+#define YELLOW_LED_GPIO 4 // GPIO 4
+#define HAPTIC_GPIO_1 8   // GPIO 8
+#define HAPTIC_GPIO_2 12  // GPIO 12
+#define HAPTIC_GPIO_3 13  // GPIO 13
 #define BLINK_PERIOD 1000 // 1 sec
 #define DELIMITER ", "
 #define KEEP_ALIVE_INTERVAL_MS 5000  // Send keep-alive every 5 seconds
@@ -36,6 +38,7 @@ struct ble_gap_adv_params adv_params;
 bool status = false;
 
 static uint16_t conn_id = 1;  // connection ID when client connects
+static uint16_t is_connected = 0;
 
 // Global variables will be read from RPi
 static int rpi_signal = -1;
@@ -45,19 +48,25 @@ static int threshold_2 = -1;   // faster pattern
 
 // GPIO Initialization
 static void configure_leds(void) {
-  gpio_reset_pin(LED_GPIO_1);
-  gpio_reset_pin(LED_GPIO_2);
-  //gpio_reset_pin(LED_GPIO_3);
+  gpio_reset_pin(HAPTIC_GPIO_1);
+  gpio_reset_pin(HAPTIC_GPIO_2);
+  gpio_reset_pin(HAPTIC_GPIO_3);
+  gpio_reset_pin(GREEN_LED_GPIO);
+  gpio_reset_pin(YELLOW_LED_GPIO);
 
   // Set the GPIOs as a push/pull output
-  gpio_set_direction(LED_GPIO_1, GPIO_MODE_INPUT_OUTPUT);
-  gpio_set_direction(LED_GPIO_2, GPIO_MODE_INPUT_OUTPUT);
-  //gpio_set_direction(LED_GPIO_3, GPIO_MODE_INPUT);
+  gpio_set_direction(HAPTIC_GPIO_1, GPIO_MODE_INPUT_OUTPUT);
+  gpio_set_direction(HAPTIC_GPIO_2, GPIO_MODE_INPUT_OUTPUT);
+  gpio_set_direction(HAPTIC_GPIO_3, GPIO_MODE_INPUT_OUTPUT);
+  gpio_set_direction(GREEN_LED_GPIO, GPIO_MODE_INPUT_OUTPUT);
+  gpio_set_direction(YELLOW_LED_GPIO, GPIO_MODE_INPUT_OUTPUT);
 
   // Start GPIOs as off
-  gpio_set_level(LED_GPIO_1, false);
-  gpio_set_level(LED_GPIO_2, false);
-  //gpio_set_level(LED_GPIO_3, false);
+  gpio_set_level(HAPTIC_GPIO_1, false);
+  gpio_set_level(HAPTIC_GPIO_2, false);
+  gpio_set_level(HAPTIC_GPIO_3, false);
+  gpio_set_level(GREEN_LED_GPIO, false);
+  gpio_set_level(YELLOW_LED_GPIO, false);
 }
 
 void ble_app_advertise(void);
@@ -160,6 +169,9 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg) {
         ESP_LOGI("GAP", "BLE GAP EVENT CONNECT %s", event->connect.status == 0 ? "OK!" : "FAILED!");
         if (event->connect.status == 0) {
             conn_id = event->connect.conn_handle;
+            is_connected = 1;
+            gpio_set_level(YELLOW_LED_GPIO, true); // turn on yellow light to signal connection on
+            //gpio_set_level(GREEN_LED_GPIO, false);
             ESP_LOGI("BLE", "Connected! connection handle = %d", conn_id);
             //xTaskCreate(send_keep_alive, "keep_alive_task", 4096, NULL, 5, NULL);
         }
@@ -171,6 +183,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg) {
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI("GAP", "BLE GAP EVENT DISCONNECTED");
         conn_id = 1;  // reset connection ID
+        is_connected = 0;
         // Reset global variables
         rpi_signal = -1;
         user_distance = -1;
@@ -249,35 +262,31 @@ void app_main() {
 
     while(1) {
         // Disconnected case, alert user with constant On
-        if (conn_id == 1) {
+        if (conn_id == 1 && is_connected == 0) {
             if (led_pattern != 0) {
-                printf("LED On, No connection alert\n");
+                printf("conn_id: %d, connected flag: %d.\n", conn_id, is_connected);
+                printf("Yellow LED off. No connection alert.\n");
                 led_pattern = 0;
             }
-            led_state = gpio_get_level(LED_GPIO_1);
-            gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
-            gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
-            //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
-            if ( (!led_state) == true) {
-                vTaskDelay((BLINK_PERIOD/2) / portTICK_PERIOD_MS); // wait 1/2 period
-            }
-            else {
-                vTaskDelay((BLINK_PERIOD*5) / portTICK_PERIOD_MS); // wait 5 periods
-            }
-            //vTaskDelay(pdMS_TO_TICKS(100)); // 100 ms
+            gpio_set_level(YELLOW_LED_GPIO, false); // turn off yellow light to signal connection off
+            //gpio_set_level(GREEN_LED_GPIO, true);
+            gpio_set_level(HAPTIC_GPIO_1, false);
+            gpio_set_level(HAPTIC_GPIO_2, false);
+            gpio_set_level(HAPTIC_GPIO_3, false);
+            vTaskDelay(pdMS_TO_TICKS(10)); // 10 ms
         }
         // Off case and slight delay to prevent useless/extremely close cycles and overuse of CPU
-        else if ( (user_distance < 0 && abs(user_distance) > threshold_1) || threshold_1 == -1 ) {
+        else if ( (user_distance < 0 && abs(user_distance) > threshold_1) || rpi_signal == 0 ) {
             if (led_pattern != 1) {
                 printf("LED Off\n");
                 led_pattern = 1;
             }
-            gpio_set_level(LED_GPIO_1, false);
-            gpio_set_level(LED_GPIO_2, false);
-            //gpio_set_level(LED_GPIO_3, false);
+            gpio_set_level(HAPTIC_GPIO_1, false);
+            gpio_set_level(HAPTIC_GPIO_2, false);
+            gpio_set_level(HAPTIC_GPIO_3, false);
+            gpio_set_level(GREEN_LED_GPIO, false);
             // Prevent CPU hogging between app main and interrupt task
-            vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms
-            //! can change to 10 for 10 ms if LED responsiveness is slow
+            vTaskDelay(pdMS_TO_TICKS(10)); // 10 ms
         }
         // Fastest output case for within smallest threshold, when user_distance is positive user is within hazard
         else if ( (user_distance < 0 && abs(user_distance) <= threshold_2) || user_distance > 0) {
@@ -285,10 +294,11 @@ void app_main() {
                 printf("Blink LED (Closer Threshold)\n");
                 led_pattern = 2;
             }
-            led_state = gpio_get_level(LED_GPIO_1);
-            gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
-            gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
-            //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
+            led_state = gpio_get_level(HAPTIC_GPIO_1);
+            gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
+            gpio_set_level(HAPTIC_GPIO_2, !led_state); 
+            gpio_set_level(HAPTIC_GPIO_3, !led_state); 
+            gpio_set_level(GREEN_LED_GPIO, !led_state);
             vTaskDelay((BLINK_PERIOD/4) / portTICK_PERIOD_MS); // wait 1/4 period
         }
         // Slower output case for between largest and smallest threshold
@@ -297,10 +307,11 @@ void app_main() {
                 printf("Blink LED (Further Threshold)\n");
                 led_pattern = 3;
             }
-            led_state = gpio_get_level(LED_GPIO_1);
-            gpio_set_level(LED_GPIO_1, !led_state); // switch the LED state
-            gpio_set_level(LED_GPIO_2, !led_state); // switch the LED state
-            //gpio_set_level(LED_GPIO_3, !led_state); // switch the LED state
+            led_state = gpio_get_level(HAPTIC_GPIO_1);
+            gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
+            gpio_set_level(HAPTIC_GPIO_2, !led_state); 
+            gpio_set_level(HAPTIC_GPIO_3, !led_state); 
+            gpio_set_level(GREEN_LED_GPIO, !led_state);
             vTaskDelay(BLINK_PERIOD / portTICK_PERIOD_MS); // wait 1 period
         }
     }
