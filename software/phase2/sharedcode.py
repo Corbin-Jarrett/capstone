@@ -9,3 +9,7 @@ thermal_frame_y = 62
 
 max_hazards = 9
 max_hands = 1
+
+calibrate_depth = False
+hand_height_measurement = 40 # cm
+max_hazard_height = 10 # cm

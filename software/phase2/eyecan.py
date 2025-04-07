@@ -1,6 +1,6 @@
 # Capstone Eyecan Multiprocessing with both cameras
 from sharedcode import *
-import picamproc, thermcamproc # import processing files
+import picamproc, thermcamproc
 import signal
 import time
 import numpy as np
@@ -33,6 +33,7 @@ thermal_ready = multiprocessing.Value('i', 0, lock=lock)
 manager = multiprocessing.Manager()
 hand_data = manager.list([0]*(max_hands + 2)) # adding one for hand count and one for depth
 thermal_data = manager.list([0]*(max_hazards + 1))
+depth_data = manager.list([0,0])
 
 async def find_esp32():
     # Scan for BLE devices and return the address of ESP32. 
@@ -81,9 +82,9 @@ esp32_address = asyncio.run(find_esp32())
 while not esp32_address:
     print("ESP32 not found. Make sure it's advertising.")
     esp32_address = asyncio.run(find_esp32())
-    
+
 # set up processes
-p1 = multiprocessing.Process(target=picamproc.picamcapture, args=(picam_ready, thermal_ready, hand_data))
+p1 = multiprocessing.Process(target=picamproc.picamcapture, args=(picam_ready, thermal_ready, hand_data, depth_data))
 p2 = multiprocessing.Process(target=thermcamproc.thermalcapture, args=(picam_ready, thermal_ready, thermal_data))
 p1.start()
 p2.start()
@@ -92,6 +93,17 @@ p2.start()
 async def main():
     client = BleakClient(esp32_address, timeout=10.0)
     await connect_ble(client)
+
+    if calibrate_depth:
+        while(0 in depth_data):
+            time.sleep(1)
+        depth_slope = hand_height_measurement/(depth_data[1]-depth_data[0])
+        depth_offset = depth_data[0]
+        print("depth slope:", depth_slope)
+        print("depth_offset:", depth_offset)
+    else:
+        depth_slope = 232
+        depth_offset = 0.125
 
     while True:
         try:
@@ -107,7 +119,7 @@ async def main():
             dist_array = []
             num_hazards = thermal_data[0]
             num_hands = hand_data[0]
-            hand_depth = 232*(hand_data[1]-0.125) # numbers come from manual calibration
+            hand_depth = depth_slope*(hand_data[1]-depth_offset) # numbers come from manual calibration
             for i in range(num_hazards):
                 contour = thermal_data[i+1]
 
@@ -121,7 +133,7 @@ async def main():
             if dist_array:
                 pixel_distance = max(dist_array)
                 cm_distance = scale_factor*pixel_distance
-                dist_3d = (math.sqrt((cm_distance**2) + (hand_depth**2))) - 5   # set 5 cm as height of hazard
+                dist_3d = (math.sqrt((cm_distance**2) + (hand_depth**2))) - max_hazard_height
                 print(f"closest distance: {dist_3d} cm")
                 await ble_message(client, 1, cm_distance)
             else:
