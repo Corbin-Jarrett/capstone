@@ -120,6 +120,10 @@ async def main():
             num_hazards = thermal_data[0]
             num_hands = hand_data[0]
             hand_depth = depth_slope*(hand_data[1]-depth_offset) # numbers come from manual calibration
+            if hand_depth < max_hazard_height:
+                hand_depth = max_hazard_height
+
+            print(hand_depth)
             for i in range(num_hazards):
                 contour = thermal_data[i+1]
 
@@ -133,9 +137,9 @@ async def main():
             if dist_array:
                 pixel_distance = max(dist_array)
                 cm_distance = scale_factor*pixel_distance
-                dist_3d = (math.sqrt((cm_distance**2) + (hand_depth**2))) - max_hazard_height
+                dist_3d = (math.sqrt((cm_distance**2) + ((hand_depth - max_hazard_height)**2)))
                 print(f"closest distance: {dist_3d} cm")
-                await ble_message(client, 1, cm_distance)
+                await ble_message(client, 1, dist_3d)
             else:
                 await ble_message(client, 0, 0)
 
