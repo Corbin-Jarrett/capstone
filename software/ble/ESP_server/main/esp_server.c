@@ -41,10 +41,14 @@ static uint16_t conn_id = 1;  // connection ID when client connects
 static uint16_t is_connected = 0;
 
 // Global variables will be read from RPi
-static int rpi_signal = -1;
-static int user_distance = -1;
-static int threshold_1 = -1;   // slower pattern
-static int threshold_2 = -1;   // faster pattern
+static int rpi_signal = 0;
+static int user_distance = 100;
+static int threshold_1 = 10;   // slower pattern
+static int threshold_2 = 5;   // faster pattern
+
+// Global variable to track status
+static int led_state;
+static int led_pattern = -1;
 
 // GPIO Initialization
 static void configure_leds(void) {
@@ -75,26 +79,24 @@ void ble_app_advertise(void);
 static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg) {
     uint8_t *bin_data = ctxt->om->om_data;
     int len = ctxt->om->om_len;
-    char *str_data = malloc(len + 1);
+    char str_data[len + 1];
 
-    if (str_data != NULL) { // malloc sucess check
-        memcpy(str_data, bin_data, len);
-        str_data[len] = ',';      // delimiter
-        str_data[len + 1] = '\0'; // null termination
-    }
+    memcpy(str_data, bin_data, len);
+    str_data[len] = ',';      // delimiter
+    str_data[len + 1] = '\0'; // null termination
 
     printf("Data from the client: %.*s\n", len, str_data);
 
-    // Reset global variables
-    rpi_signal = -1;
-    user_distance = -1;
-    threshold_1 = -1;   // slower pattern
-    threshold_2 = -1;   // faster pattern
+    // // Reset global variables
+    // rpi_signal = 0;
+    // user_distance = 100;
+    // threshold_1 = 10;   // slower pattern
+    // threshold_2 = 5;   // faster pattern
 
     // Copy data to avoid modifying original buffer
     char str_data_copy[len];
     memset(str_data_copy, 0, len);
-    strncpy(str_data_copy, (char*)str_data, len - 1);
+    strncpy(str_data_copy, str_data, len - 1);
 
     // Parse data
     char * token;
@@ -112,7 +114,6 @@ static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_g
     printf("Threshold 1: %d\n", threshold_1);
     printf("Threshold 2: %d\n", threshold_2);
 
-    free(str_data);
     return 0;
 }
 
@@ -160,6 +161,78 @@ void send_keep_alive(void *arg) {
     }
 }
 
+// Disconnected case
+void disconnected_case (void *arg) {
+    while(1) {
+        if (is_connected == 0) {
+            if (led_pattern != 0) {
+                printf("conn_id: %d, connected flag: %d.\n", conn_id, is_connected);
+                printf("Yellow LED off. No connection alert.\n");
+                led_pattern = 0;
+            }
+            gpio_set_level(YELLOW_LED_GPIO, false); // turn off yellow light to signal connection off
+            gpio_set_level(GREEN_LED_GPIO, false);
+            gpio_set_level(HAPTIC_GPIO_1, false);
+            gpio_set_level(HAPTIC_GPIO_2, false);
+            gpio_set_level(HAPTIC_GPIO_3, false);
+            vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms
+        }
+    }
+}
+
+// Off case and slight delay to prevent useless/extremely close cycles and overuse of CPU
+void off_case (void *arg) {
+    while(1) {
+        if ( is_connected == 1 && ( (user_distance > threshold_1) || rpi_signal == 0) ) {
+            if (led_pattern != 1) {
+                printf("LED Off\n");
+                led_pattern = 1;
+            }
+            gpio_set_level(HAPTIC_GPIO_1, false);
+            gpio_set_level(HAPTIC_GPIO_2, false);
+            gpio_set_level(HAPTIC_GPIO_3, false);
+            gpio_set_level(GREEN_LED_GPIO, false);
+            // Prevent CPU hogging between app main and interrupt task
+            vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms
+        }
+    }
+}
+
+// Fastest output case for within smallest threshold, when user_distance is positive user is within hazard
+void closer_threshold (void *arg) {
+    while(1) {
+        if ( is_connected == 1 && rpi_signal == 1 && (user_distance <= threshold_2) ) {
+            if (led_pattern != 2) {
+                printf("Blink LED (Closer Threshold)\n");
+                led_pattern = 2;
+            }
+            led_state = gpio_get_level(GREEN_LED_GPIO);
+            //gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
+            //gpio_set_level(HAPTIC_GPIO_2, !led_state); 
+            //gpio_set_level(HAPTIC_GPIO_3, !led_state); 
+            gpio_set_level(GREEN_LED_GPIO, !led_state);
+            vTaskDelay(pdMS_TO_TICKS(BLINK_PERIOD/4)); // wait 1/4 period 
+        }
+    }
+}
+
+// Slower output case for between largest and smallest threshold
+void further_threshold (void *arg) {
+    while(1) {
+        if ( is_connected == 1 && rpi_signal == 1 && (user_distance <= threshold_1 && user_distance > threshold_2) ) {
+            if (led_pattern != 3) {
+                printf("Blink LED (Further Threshold)\n");
+                led_pattern = 3;
+            }
+            led_state = gpio_get_level(GREEN_LED_GPIO);
+            //gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
+            //gpio_set_level(HAPTIC_GPIO_2, !led_state); 
+            //gpio_set_level(HAPTIC_GPIO_3, !led_state); 
+            gpio_set_level(GREEN_LED_GPIO, !led_state);
+            vTaskDelay(pdMS_TO_TICKS(BLINK_PERIOD)); // wait 1 period 
+        }
+    }
+}
 
 // BLE event handling
 static int ble_gap_event(struct ble_gap_event *event, void *arg) {
@@ -251,68 +324,71 @@ void connect_ble(void) {
     nimble_port_freertos_init(host_task);      // 6 - Run the thread
 }
 
-
 void app_main() {
-    int led_state;
-    int led_pattern = -1;
+    //int led_state;
+    //int led_pattern = -1;
 
     // configuration
     configure_leds();
     connect_ble();
+    xTaskCreate(off_case, "off_case", 4096, NULL, 5, NULL);
+    xTaskCreate(closer_threshold, "closer_threshold", 4096, NULL, 5, NULL);
+    xTaskCreate(further_threshold, "further_threshold", 4096, NULL, 5, NULL);
+    xTaskCreate(disconnected_case, "disconnected_case", 4096, NULL, 5, NULL);
 
-    while(1) {
-        // Disconnected case, alert user with constant On
-        if (conn_id == 1 && is_connected == 0) {
-            if (led_pattern != 0) {
-                printf("conn_id: %d, connected flag: %d.\n", conn_id, is_connected);
-                printf("Yellow LED off. No connection alert.\n");
-                led_pattern = 0;
-            }
-            gpio_set_level(YELLOW_LED_GPIO, false); // turn off yellow light to signal connection off
-            //gpio_set_level(GREEN_LED_GPIO, true);
-            gpio_set_level(HAPTIC_GPIO_1, false);
-            gpio_set_level(HAPTIC_GPIO_2, false);
-            gpio_set_level(HAPTIC_GPIO_3, false);
-            vTaskDelay(pdMS_TO_TICKS(10)); // 10 ms
-        }
-        // Off case and slight delay to prevent useless/extremely close cycles and overuse of CPU
-        else if ( (user_distance < 0 && abs(user_distance) > threshold_1) || rpi_signal == 0 ) {
-            if (led_pattern != 1) {
-                printf("LED Off\n");
-                led_pattern = 1;
-            }
-            gpio_set_level(HAPTIC_GPIO_1, false);
-            gpio_set_level(HAPTIC_GPIO_2, false);
-            gpio_set_level(HAPTIC_GPIO_3, false);
-            gpio_set_level(GREEN_LED_GPIO, false);
-            // Prevent CPU hogging between app main and interrupt task
-            vTaskDelay(pdMS_TO_TICKS(10)); // 10 ms
-        }
-        // Fastest output case for within smallest threshold, when user_distance is positive user is within hazard
-        else if ( (user_distance < 0 && abs(user_distance) <= threshold_2) || user_distance > 0) {
-            if (led_pattern != 2) {
-                printf("Blink LED (Closer Threshold)\n");
-                led_pattern = 2;
-            }
-            led_state = gpio_get_level(HAPTIC_GPIO_1);
-            gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
-            gpio_set_level(HAPTIC_GPIO_2, !led_state); 
-            gpio_set_level(HAPTIC_GPIO_3, !led_state); 
-            gpio_set_level(GREEN_LED_GPIO, !led_state);
-            vTaskDelay((BLINK_PERIOD/4) / portTICK_PERIOD_MS); // wait 1/4 period
-        }
-        // Slower output case for between largest and smallest threshold
-        else if (user_distance < 0 && abs(user_distance) <= threshold_1) {
-            if (led_pattern != 3) {
-                printf("Blink LED (Further Threshold)\n");
-                led_pattern = 3;
-            }
-            led_state = gpio_get_level(HAPTIC_GPIO_1);
-            gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
-            gpio_set_level(HAPTIC_GPIO_2, !led_state); 
-            gpio_set_level(HAPTIC_GPIO_3, !led_state); 
-            gpio_set_level(GREEN_LED_GPIO, !led_state);
-            vTaskDelay(BLINK_PERIOD / portTICK_PERIOD_MS); // wait 1 period
-        }
-    }
+    // while(1) {
+        // // Disconnected case, alert user with constant On
+        // if (is_connected == 0) {
+        //     if (led_pattern != 0) {
+        //         printf("conn_id: %d, connected flag: %d.\n", conn_id, is_connected);
+        //         printf("Yellow LED off. No connection alert.\n");
+        //         led_pattern = 0;
+        //     }
+        //     gpio_set_level(YELLOW_LED_GPIO, false); // turn off yellow light to signal connection off
+        //     gpio_set_level(GREEN_LED_GPIO, false);
+        //     gpio_set_level(HAPTIC_GPIO_1, false);
+        //     gpio_set_level(HAPTIC_GPIO_2, false);
+        //     gpio_set_level(HAPTIC_GPIO_3, false);
+        //     vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms
+        // }
+        // // Off case and slight delay to prevent useless/extremely close cycles and overuse of CPU
+        // else if ( user_distance < 0 || abs(user_distance) > threshold_1 || rpi_signal == 0 ) {
+        //     if (led_pattern != 1) {
+        //         printf("LED Off\n");
+        //         led_pattern = 1;
+        //     }
+        //     gpio_set_level(HAPTIC_GPIO_1, false);
+        //     gpio_set_level(HAPTIC_GPIO_2, false);
+        //     gpio_set_level(HAPTIC_GPIO_3, false);
+        //     gpio_set_level(GREEN_LED_GPIO, false);
+        //     // Prevent CPU hogging between app main and interrupt task
+        //     vTaskDelay(pdMS_TO_TICKS(50)); // 50 ms
+        // }
+        // // Fastest output case for within smallest threshold, when user_distance is positive user is within hazard
+        // else if ( (user_distance > 0 && abs(user_distance) <= threshold_2) || user_distance < 0) {
+        //     if (led_pattern != 2) {
+        //         printf("Blink LED (Closer Threshold)\n");
+        //         led_pattern = 2;
+        //     }
+        //     led_state = gpio_get_level(GREEN_LED_GPIO);
+        //     //gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
+        //     //gpio_set_level(HAPTIC_GPIO_2, !led_state); 
+        //     //gpio_set_level(HAPTIC_GPIO_3, !led_state); 
+        //     gpio_set_level(GREEN_LED_GPIO, !led_state);
+        //     vTaskDelay(pdMS_TO_TICKS(BLINK_PERIOD/4)); // wait 1/4 period
+        // }
+        // // Slower output case for between largest and smallest threshold
+        // else if (user_distance > 0 && abs(user_distance) <= threshold_1) {
+        //     if (led_pattern != 3) {
+        //         printf("Blink LED (Further Threshold)\n");
+        //         led_pattern = 3;
+        //     }
+        //     led_state = gpio_get_level(GREEN_LED_GPIO);
+        //     //gpio_set_level(HAPTIC_GPIO_1, !led_state); // switch the LED state
+        //     //gpio_set_level(HAPTIC_GPIO_2, !led_state); 
+        //     //gpio_set_level(HAPTIC_GPIO_3, !led_state); 
+        //     gpio_set_level(GREEN_LED_GPIO, !led_state);
+        //     vTaskDelay(pdMS_TO_TICKS(BLINK_PERIOD)); // wait 1 period
+        // }
+    // }
 }

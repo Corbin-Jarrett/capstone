@@ -74,8 +74,8 @@ async def main():
     while True:
         try:
             while client.is_connected:
-                await ble_message(client, -6, threshold_1)
-                await asyncio.sleep(10)
+                await ble_message(client, -0.0, threshold_1)
+                #await asyncio.sleep(1)
 
             if not client.is_connected:
                 await connect_ble(client)
